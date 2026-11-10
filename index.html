@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GoMo Candles — More Than a Candle. A Moment of Peace.</title>
+  <meta name="description" content="GoMo Candles brings peace, positivity and emotional well-being into everyday life through aromatherapy and the timeless Indian belief in the Evil Eye." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap" rel="stylesheet" />
+  <style>
+:root {
+  --bg:#f9f4ef; --bg-alt:#f2ebe1; --ink:#1a1625; --ink-muted:#6b6478;
+  --gold:#c8963e; --gold-light:#e8c97e; --gold-pale:#fdf3e3;
+  --blue-eye:#1e3a8a; --blue-mid:#2d60c8; --blue-light:#93b4f8; --blue-pale:#e8f0ff;
+  --sage:#7a9e8e; --sage-pale:#e8f2ee; --sage-mid:#5a8070;
+  --border:#e0d6cb; --border-dark:#c8b89a;
+  --r-sm:8px; --r-md:16px; --r-lg:28px; --r-xl:40px; --r-pill:999px;
+  --shadow-card:0 2px 20px rgba(26,22,37,.07),0 1px 4px rgba(26,22,37,.04);
+  --shadow-hover:0 16px 56px rgba(26,22,37,.14),0 4px 16px rgba(26,22,37,.08);
+  --font-d:'Cormorant Garamond',Georgia,serif;
+  --font-b:'DM Sans',system-ui,-apple-system,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--font-b);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{display:block;max-width:100%}
+a{color:inherit;text-decoration:none}
+ul{list-style:none}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:18px 56px;background:rgba(249,244,239,.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);transition:padding .3s}
+.nav-logo{font-family:var(--font-d);font-size:1.5rem;font-weight:600;letter-spacing:.04em;color:var(--ink);display:flex;align-items:center;gap:10px}
+.nav-links{display:flex;align-items:center;gap:32px}
+.nav-links a{font-size:.875rem;font-weight:500;color:var(--ink-muted);transition:color .2s}
+.nav-links a:hover{color:var(--ink)}
+.nav-wa{display:inline-flex;align-items:center;gap:7px;background:#25D366;color:white!important;padding:9px 18px;border-radius:var(--r-pill);font-size:.8125rem!important;font-weight:600!important;transition:background .2s,transform .2s!important}
+.nav-wa:hover{background:#1db954!important;transform:translateY(-1px)}
+.nav-cta{background:var(--ink)!important;color:#fff!important;padding:9px 22px;border-radius:var(--r-pill);font-size:.875rem!important;font-weight:500!important;transition:background .2s,transform .2s!important}
+.nav-cta:hover{background:var(--blue-eye)!important;transform:translateY(-1px)}
+.nav-hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:4px;background:none;border:none}
+.nav-hamburger span{display:block;width:24px;height:2px;background:var(--ink);border-radius:2px;transition:.3s}
+
+/* HERO */
+.hero{min-height:100vh;display:grid;grid-template-columns:1fr 1fr;align-items:center;padding:112px 56px 80px;gap:72px;position:relative;overflow:hidden}
+.hero-orb{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none}
+.hero-orb-1{width:640px;height:640px;background:radial-gradient(circle,rgba(200,150,62,.13) 0%,transparent 70%);top:-120px;right:-80px}
+.hero-orb-2{width:440px;height:440px;background:radial-gradient(circle,rgba(30,58,138,.09) 0%,transparent 70%);bottom:-40px;left:80px}
+.hero-content{position:relative;z-index:2}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.14em;color:var(--gold);padding:6px 14px;margin-bottom:24px;background:var(--gold-pale);border:1px solid #e8c97e;border-radius:var(--r-pill)}
+.hero-eyebrow::before{content:'';width:6px;height:6px;background:var(--gold);border-radius:50%}
+.hero-h1{font-family:var(--font-d);font-size:clamp(3.2rem,5.5vw,5.75rem);font-weight:300;line-height:1.07;letter-spacing:-.025em;margin-bottom:28px}
+.hero-h1 em{font-style:italic;color:var(--blue-eye)}
+.hero-h1 strong{font-weight:700;color:var(--gold);font-style:normal}
+.hero-sub{font-size:1.0625rem;line-height:1.72;color:var(--ink-muted);max-width:460px;margin-bottom:44px}
+.hero-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.btn-p{display:inline-flex;align-items:center;gap:8px;background:var(--ink);color:#fff;padding:16px 32px;border-radius:var(--r-pill);font-size:1rem;font-weight:500;transition:background .25s,transform .25s,box-shadow .25s;border:none;cursor:pointer}
+.btn-p:hover{background:var(--blue-eye);transform:translateY(-2px);box-shadow:0 8px 32px rgba(30,58,138,.25)}
+.btn-s{display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--ink);padding:15px 28px;border-radius:var(--r-pill);font-size:1rem;font-weight:500;border:1.5px solid var(--border-dark);transition:border-color .2s,transform .2s;cursor:pointer}
+.btn-s:hover{border-color:var(--ink);transform:translateY(-2px)}
+.btn-wa-lg{display:inline-flex;align-items:center;gap:9px;background:#25D366;color:white;padding:16px 30px;border-radius:var(--r-pill);font-size:1rem;font-weight:500;transition:background .2s,transform .25s,box-shadow .25s;border:none;cursor:pointer}
+.btn-wa-lg:hover{background:#1db954;transform:translateY(-2px);box-shadow:0 8px 28px rgba(37,211,102,.3)}
+.hero-trust{display:flex;align-items:center;gap:24px;margin-top:52px;padding-top:28px;border-top:1px solid var(--border);flex-wrap:wrap}
+.trust-item{display:flex;flex-direction:column;gap:2px}
+.trust-num{font-family:var(--font-d);font-size:1.75rem;font-weight:600;color:var(--ink);line-height:1}
+.trust-lbl{font-size:.75rem;color:var(--ink-muted);letter-spacing:.03em}
+.trust-div{width:1px;height:36px;background:var(--border)}
+
+/* HERO VISUAL */
+.hero-visual{position:relative;z-index:2;display:flex;align-items:center;justify-content:center}
+.eye-stage{position:relative;width:440px;height:480px;display:flex;align-items:center;justify-content:center}
+.eye-ring{position:absolute;border-radius:50%;border:1px solid;animation:ring-beat 4s ease-in-out infinite}
+.er1{inset:0;border-color:rgba(200,150,62,.22);animation-delay:0s}
+.er2{inset:28px;border-color:rgba(200,150,62,.15);animation-delay:.7s}
+.er3{inset:56px;border-color:rgba(200,150,62,.09);animation-delay:1.4s}
+@keyframes ring-beat{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.04);opacity:1}}
+.eye-card{position:relative;z-index:2;background:white;border:1px solid var(--border);border-radius:50%;width:280px;height:280px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-hover);animation:eye-float 6s ease-in-out infinite}
+@keyframes eye-float{0%,100%{transform:translateY(0) rotate(0deg)}40%{transform:translateY(-14px) rotate(1.2deg)}70%{transform:translateY(-7px) rotate(-.8deg)}}
+.eye-card::before{content:'';position:absolute;inset:0;border-radius:50%;background:radial-gradient(ellipse at 35% 30%,rgba(200,150,62,.07) 0%,transparent 65%)}
+
+/* floating mini product price cards */
+.mini-card{position:absolute;z-index:10;background:white;border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 16px;display:flex;align-items:center;gap:11px;box-shadow:var(--shadow-card);white-space:nowrap;animation:badge-bob 5s ease-in-out infinite}
+.mc-1{top:24px;left:-36px;animation-delay:0s}
+.mc-2{bottom:64px;right:-32px;animation-delay:1.8s}
+.mc-3{bottom:20px;left:4px;animation-delay:1s}
+@keyframes badge-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.mc-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.mc-info{display:flex;flex-direction:column;gap:1px}
+.mc-name{font-size:.8rem;font-weight:600;color:var(--ink);line-height:1.2}
+.mc-price{font-family:var(--font-d);font-size:.95rem;font-weight:700;color:var(--gold)}
+
+/* CSS PRODUCT ILLUSTRATIONS */
+/* candle */
+.candle-wrap{position:relative;display:flex;flex-direction:column;align-items:center}
+.flame{width:14px;height:22px;margin-bottom:-2px;background:linear-gradient(to top,#f97316,#fbbf24,#fef9c3);border-radius:50% 50% 20% 20% / 60% 60% 30% 30%;animation:flicker 1.8s ease-in-out infinite alternate;transform-origin:bottom center;box-shadow:0 0 8px 2px rgba(251,191,36,.5)}
+@keyframes flicker{0%{transform:scaleX(1) scaleY(1) rotate(-2deg)}100%{transform:scaleX(.85) scaleY(1.08) rotate(2deg)}}
+.wick{width:2px;height:10px;background:#3b2a1a;border-radius:1px;margin-bottom:-1px}
+.candle-body{width:68px;height:110px;background:linear-gradient(135deg,#e8f0ff 0%,#c8d8ff 40%,#1e3a8a 100%);border-radius:8px 8px 4px 4px;position:relative;overflow:hidden;box-shadow:inset -6px 0 12px rgba(0,0,0,.18),inset 4px 0 8px rgba(255,255,255,.25),0 4px 16px rgba(30,58,138,.3)}
+.candle-eye{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.candle-band{position:absolute;bottom:14px;left:0;right:0;background:rgba(255,255,255,.12);height:26px;display:flex;align-items:center;justify-content:center}
+.candle-txt{font-family:var(--font-d);font-size:.6rem;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.8);text-transform:uppercase}
+.candle-base{width:76px;height:10px;background:linear-gradient(to right,#c8b89a,#e8d8c8,#c8b89a);border-radius:2px 2px 4px 4px}
+.drip{position:absolute;width:4px;background:linear-gradient(to bottom,#c8d8ff,transparent);border-radius:0 0 4px 4px;animation:drip-anim 3s ease-in-out infinite}
+.d1{height:12px;top:0;left:18px;animation-delay:0s}
+.d2{height:8px;top:0;right:16px;animation-delay:1.2s}
+@keyframes drip-anim{0%,100%{opacity:.6;transform:scaleY(1)}50%{opacity:1;transform:scaleY(1.3)}}
+
+/* sachet */
+.sachet-wrap{position:relative;display:flex;align-items:center;justify-content:center;height:140px}
+.sachet-string{position:absolute;top:4px;left:50%;transform:translateX(-50%);width:60px;height:30px;border:2px solid #c8963e;border-bottom:none;border-radius:30px 30px 0 0}
+.sachet-body{width:90px;height:112px;margin-top:16px;background:linear-gradient(145deg,#e8f2ee 0%,#a8c8b8 50%,#5a8070 100%);border-radius:8px 8px 24px 24px;position:relative;overflow:hidden;box-shadow:inset -5px 0 10px rgba(0,0,0,.12),inset 3px 0 8px rgba(255,255,255,.3),0 4px 16px rgba(90,128,112,.35)}
+.sachet-top{position:absolute;top:0;left:0;right:0;height:28px;background:linear-gradient(to bottom,rgba(255,255,255,.25),rgba(255,255,255,.05))}
+.sachet-eye{position:absolute;top:50%;left:50%;transform:translate(-50%,-44%)}
+.sachet-txt{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-family:var(--font-d);font-size:.62rem;font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.85);text-transform:uppercase}
+.sachet-tie{position:absolute;top:-4px;left:50%;transform:translateX(-50%);width:12px;height:12px;background:#c8963e;border-radius:50%}
+
+/* spray */
+.spray-wrap{position:relative;display:flex;align-items:flex-end;justify-content:center;height:155px}
+.spray-bottle{position:relative;width:56px;height:120px;display:flex;flex-direction:column;align-items:center}
+.spray-cap{width:60px;height:10px;background:linear-gradient(to right,#e8c97e,#c8963e,#e8c97e);border-radius:4px 4px 0 0;flex-shrink:0}
+.spray-head{width:40px;height:28px;background:linear-gradient(135deg,#fdf3e3 0%,#c8963e 100%);border-radius:6px 6px 0 0;position:relative;box-shadow:0 2px 8px rgba(200,150,62,.3)}
+.spray-nozzle{position:absolute;right:-18px;top:8px;width:20px;height:6px;background:linear-gradient(to right,#c8963e,#e8c97e);border-radius:0 4px 4px 0}
+.spray-trigger{position:absolute;left:50%;transform:translateX(-50%);bottom:-6px;width:16px;height:12px;background:#a07030;border-radius:0 0 4px 4px}
+.spray-body{width:56px;flex:1;background:linear-gradient(135deg,#fdf3e3 0%,#f2d8a8 50%,#c8963e 100%);border-radius:0 0 12px 12px;position:relative;overflow:hidden;box-shadow:inset -4px 0 10px rgba(0,0,0,.1),inset 3px 0 6px rgba(255,255,255,.4),0 4px 16px rgba(200,150,62,.35)}
+.spray-eye{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%)}
+.spray-txt{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-family:var(--font-d);font-size:.6rem;font-weight:600;letter-spacing:.07em;color:rgba(26,22,37,.7);text-transform:uppercase}
+.mist{position:absolute;left:-32px;top:12px;display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.mist-p{width:5px;height:5px;border-radius:50%;background:rgba(200,150,62,.35);animation:mist-fly 2s ease-out infinite}
+.mist-p:nth-child(1){animation-delay:0s;margin-left:0}
+.mist-p:nth-child(2){animation-delay:.3s;margin-left:5px;width:4px;height:4px}
+.mist-p:nth-child(3){animation-delay:.6s;margin-left:10px;width:3px;height:3px}
+.mist-p:nth-child(4){animation-delay:.9s;margin-left:3px;width:4px;height:4px}
+.mist-p:nth-child(5){animation-delay:1.2s;margin-left:8px;width:3px;height:3px}
+@keyframes mist-fly{0%{opacity:0;transform:translate(0,0)}30%{opacity:.8}100%{opacity:0;transform:translate(-20px,-16px)}}
+
+/* SECTION HELPERS */
+.sec-label{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.14em;display:inline-block;margin-bottom:16px}
+.sec-title{font-family:var(--font-d);font-size:clamp(2.25rem,4vw,3.5rem);font-weight:400;line-height:1.08;letter-spacing:-.025em;margin-bottom:20px}
+.sec-title em{font-style:italic;color:var(--gold)}
+.sec-sub{font-size:1.0625rem;color:var(--ink-muted);line-height:1.65;max-width:520px;margin:0 auto}
+.sec-header{text-align:center;margin-bottom:64px}
+
+/* PILLARS */
+.sec-pillars{padding:96px 56px;background:var(--bg-alt);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.pillars-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+.pillars-heading{font-family:var(--font-d);font-size:clamp(2.5rem,4vw,3.75rem);font-weight:400;line-height:1.08;letter-spacing:-.025em;margin-bottom:24px}
+.pillars-heading em{font-style:italic;color:var(--gold)}
+.pillars-body{font-size:1.0625rem;line-height:1.72;color:var(--ink-muted);max-width:480px}
+.pillar-list{display:flex;flex-direction:column;gap:18px}
+.pillar-card{background:white;border:1px solid var(--border);border-radius:var(--r-lg);padding:26px 30px;display:flex;align-items:flex-start;gap:18px;transition:transform .25s,box-shadow .25s}
+.pillar-card:hover{transform:translateX(8px);box-shadow:var(--shadow-hover)}
+.pillar-icon{width:48px;height:48px;border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0}
+.pi-gold{background:var(--gold-pale)}
+.pi-blue{background:var(--blue-pale)}
+.pi-sage{background:var(--sage-pale)}
+.pillar-h{font-family:var(--font-d);font-size:1.25rem;font-weight:600;margin-bottom:5px}
+.pillar-p{font-size:.9375rem;color:var(--ink-muted);line-height:1.6}
+
+/* PRODUCTS */
+.sec-products{padding:96px 56px}
+.products-inner{max-width:1200px;margin:0 auto}
+.products-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+.prod-card{background:white;border:1px solid var(--border);border-radius:var(--r-xl);overflow:hidden;display:flex;flex-direction:column;transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s}
+.prod-card:hover{transform:translateY(-10px);box-shadow:var(--shadow-hover)}
+.prod-vis{height:220px;display:flex;align-items:flex-end;justify-content:center;position:relative;overflow:hidden;padding-bottom:16px}
+.pv-candle{background:linear-gradient(165deg,#1e3a8a 0%,#0f1d50 55%,#0a1230 100%)}
+.pv-sachet{background:linear-gradient(165deg,#7a9e8e 0%,#3d6557 55%,#2a4a40 100%)}
+.pv-spray{background:linear-gradient(165deg,#c8963e 0%,#8a6020 55%,#5a3c10 100%)}
+.prod-stars{position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(circle,rgba(255,255,255,.18) 1px,transparent 1px);background-size:28px 28px}
+.prod-tag{position:absolute;top:16px;right:16px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);padding:4px 12px;border-radius:var(--r-pill);font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
+.prod-info{padding:28px 30px 30px;flex:1;display:flex;flex-direction:column}
+.prod-name{font-family:var(--font-d);font-size:1.75rem;font-weight:600;letter-spacing:-.02em;margin-bottom:10px}
+.prod-desc{font-size:.9375rem;color:var(--ink-muted);line-height:1.65;margin-bottom:20px;flex:1}
+.prod-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:24px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;background:var(--bg-alt);border:1px solid var(--border);border-radius:var(--r-pill);font-size:.8rem;color:var(--ink-muted);font-weight:500}
+.chip::before{content:'✦';font-size:.55rem;color:var(--gold)}
+.prod-footer{display:flex;align-items:center;justify-content:space-between;padding-top:18px;border-top:1px solid var(--border)}
+.prod-price-block{display:flex;flex-direction:column;gap:1px}
+.prod-price{font-family:var(--font-d);font-size:1.9rem;font-weight:700;color:var(--ink);line-height:1}
+.prod-price-sub{font-size:.74rem;color:var(--ink-muted)}
+.btn-buy{display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:white;padding:11px 22px;border-radius:var(--r-pill);font-size:.875rem;font-weight:500;transition:background .2s,transform .2s;border:none;cursor:pointer}
+.btn-buy:hover{background:var(--blue-eye);transform:scale(1.04)}
+
+/* STEPS */
+.sec-steps{padding:80px 56px 96px;border-top:1px solid var(--border);background:var(--bg-alt)}
+.steps-inner{max-width:1100px;margin:0 auto}
+.steps-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;position:relative}
+.steps-line{position:absolute;top:35px;left:12.5%;right:12.5%;height:1px;background:linear-gradient(90deg,transparent,var(--border),var(--border),transparent)}
+.step{text-align:center;padding:0 16px}
+.step-num{width:72px;height:72px;border-radius:50%;background:white;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-family:var(--font-d);font-size:1.5rem;font-weight:600;box-shadow:var(--shadow-card);transition:border-color .2s,box-shadow .2s;position:relative;z-index:1}
+.step:hover .step-num{border-color:var(--gold);box-shadow:0 0 0 5px rgba(200,150,62,.12),var(--shadow-card)}
+.step-h{font-family:var(--font-d);font-size:1.2rem;font-weight:600;margin-bottom:8px}
+.step-p{font-size:.9rem;color:var(--ink-muted);line-height:1.6}
+
+/* STORY DARK */
+.sec-story{background:var(--ink);color:white;padding:96px 56px;position:relative;overflow:hidden}
+.sbo{position:absolute;border-radius:50%;filter:blur(100px);pointer-events:none}
+.sbo-1{width:520px;height:520px;background:radial-gradient(circle,rgba(200,150,62,.14) 0%,transparent 70%);top:-80px;right:-60px}
+.sbo-2{width:400px;height:400px;background:radial-gradient(circle,rgba(45,96,200,.18) 0%,transparent 70%);bottom:-80px;left:80px}
+.story-inner{max-width:1100px;margin:0 auto;position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+.story-label{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.14em;color:var(--gold-light);margin-bottom:20px}
+.story-h{font-family:var(--font-d);font-size:clamp(2.5rem,4vw,3.75rem);font-weight:300;line-height:1.08;letter-spacing:-.025em;margin-bottom:28px;color:white}
+.story-h em{font-style:italic;color:var(--gold-light)}
+.story-p{font-size:1.0625rem;line-height:1.72;color:rgba(255,255,255,.62);margin-bottom:18px}
+.founder-card{display:flex;align-items:center;gap:16px;margin-top:40px;padding:20px 24px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:var(--r-lg)}
+.founder-av{width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--blue-mid));display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-size:1.25rem;font-weight:600;color:white;flex-shrink:0}
+.founder-name{font-weight:600;color:white;font-size:.9375rem;margin-bottom:2px}
+.founder-title{font-size:.8125rem;color:rgba(255,255,255,.45)}
+.stats-col{display:flex;flex-direction:column;gap:20px}
+.stat-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:var(--r-lg);padding:28px 30px;transition:background .2s,border-color .2s}
+.stat-card:hover{background:rgba(255,255,255,.08);border-color:rgba(200,150,62,.3)}
+.stat-num{font-family:var(--font-d);font-size:3rem;font-weight:600;color:var(--gold-light);line-height:1;margin-bottom:8px}
+.stat-lbl{font-size:.9375rem;color:rgba(255,255,255,.62);line-height:1.5}
+.stat-src{font-size:.75rem;color:rgba(255,255,255,.28);margin-top:8px}
+
+/* CTA BAND */
+.sec-cta{padding:80px 56px;text-align:center;background:var(--gold-pale);border-top:1px solid rgba(200,150,62,.2);border-bottom:1px solid rgba(200,150,62,.2)}
+.sec-cta .sec-title{max-width:640px;margin:0 auto 20px}
+.sec-cta .sec-sub{margin-bottom:44px}
+.cta-actions{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+
+/* FOOTER */
+footer{background:var(--ink);color:rgba(255,255,255,.6);padding:60px 56px 40px}
+.footer-inner{max-width:1100px;margin:0 auto}
+.footer-top{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:48px;padding-bottom:48px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:32px}
+.footer-logo{font-family:var(--font-d);font-size:1.5rem;font-weight:600;color:white;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.footer-desc{font-size:.875rem;line-height:1.65;color:rgba(255,255,255,.4);max-width:240px;margin-bottom:24px}
+.footer-socials{display:flex;gap:10px}
+.fsoc{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5);transition:.2s}
+.fsoc:hover{background:white;color:var(--ink);border-color:white}
+.footer-col h5{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.35);margin-bottom:20px}
+.footer-col ul{display:flex;flex-direction:column;gap:12px}
+.footer-col ul li a{font-size:.9375rem;color:rgba(255,255,255,.55);transition:color .2s}
+.footer-col ul li a:hover{color:white}
+.footer-bottom{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.footer-copy{font-size:.8125rem;color:rgba(255,255,255,.28)}
+.footer-brand{font-size:.8125rem;color:rgba(255,255,255,.38)}
+.footer-brand a{color:var(--gold-light);transition:color .2s}
+.footer-brand a:hover{color:white}
+
+/* SCROLL REVEAL */
+.r{opacity:0;transform:translateY(28px);transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)}
+.r.vis{opacity:1;transform:none}
+.rd1{transition-delay:.1s} .rd2{transition-delay:.2s} .rd3{transition-delay:.3s} .rd4{transition-delay:.4s}
+
+/* RESPONSIVE */
+@media(max-width:1024px){
+  nav{padding:16px 24px}
+  .nav-links,.nav-wa{display:none}
+  .nav-hamburger{display:flex}
+  .hero{grid-template-columns:1fr;padding:100px 24px 60px;text-align:center;gap:52px}
+  .hero-sub{margin:0 auto 44px}
+  .hero-actions{justify-content:center}
+  .hero-trust{justify-content:center}
+  .eye-stage{width:300px;height:320px}
+  .eye-card{width:200px;height:200px}
+  .mc-1,.mc-2,.mc-3{display:none}
+  .pillars-inner{grid-template-columns:1fr;gap:48px}
+  .sec-pillars{padding:72px 24px}
+  .products-grid{grid-template-columns:1fr;gap:20px}
+  .sec-products{padding:72px 24px}
+  .steps-grid{grid-template-columns:1fr 1fr;gap:20px}
+  .steps-line{display:none}
+  .sec-steps{padding:60px 24px 72px}
+  .story-inner{grid-template-columns:1fr;gap:52px}
+  .sec-story{padding:72px 24px}
+  .footer-top{grid-template-columns:1fr 1fr;gap:32px}
+  footer{padding:48px 24px 32px}
+  .sec-cta{padding:72px 24px}
+}
+@media(max-width:600px){
+  .products-grid{grid-template-columns:1fr}
+  .steps-grid{grid-template-columns:1fr}
+  .footer-top{grid-template-columns:1fr}
+  .footer-bottom{flex-direction:column;text-align:center}
+  .hero-trust{flex-wrap:wrap;gap:16px}
+  .trust-div{display:none}
+}
+body.nav-open .nav-links{display:flex;flex-direction:column;position:fixed;top:66px;left:0;right:0;background:rgba(249,244,239,.98);padding:24px 24px 32px;border-bottom:1px solid var(--border);backdrop-filter:blur(16px);gap:24px;z-index:199}
+body.nav-open .nav-links a{font-size:1.1rem;color:var(--ink)}
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="#" class="nav-logo">
+    <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+      <ellipse cx="14" cy="14" rx="12" ry="8" fill="#1e3a8a"/>
+      <circle cx="14" cy="14" r="4.5" fill="white"/>
+      <circle cx="14" cy="14" r="2.5" fill="#1e3a8a"/>
+      <circle cx="15.3" cy="12.7" r="1" fill="white"/>
+      <ellipse cx="14" cy="14" rx="12" ry="8" fill="none" stroke="#c8963e" stroke-width="1.5"/>
+    </svg>
+    GoMo Candles
+  </a>
+  <ul class="nav-links" id="navLinks">
+    <li><a href="#products">Products</a></li>
+    <li><a href="#story">Our Story</a></li>
+    <li><a href="#ritual">The Ritual</a></li>
+    <li>
+      <a href="https://wa.me/919999999999?text=Hi!%20I%20want%20to%20know%20more%20about%20GoMo%20Candles" target="_blank" rel="noopener" class="nav-wa">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.533 5.854L.057 23.571a.5.5 0 0 0 .613.612l5.76-1.473A11.95 11.95 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.933 0-3.737-.518-5.284-1.42l-.379-.22-3.919 1.001 1.023-3.816-.238-.392A9.959 9.959 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+        WhatsApp
+      </a>
+    </li>
+    <li><a href="#shop" class="nav-cta">Shop Now</a></li>
+  </ul>
+  <button class="nav-hamburger" id="burger" onclick="toggleNav()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-orb hero-orb-1"></div>
+  <div class="hero-orb hero-orb-2"></div>
+  <div class="hero-content">
+    <div class="hero-eyebrow r">Aromatherapy · Protection · Peace</div>
+    <h1 class="hero-h1 r rd1">
+      More Than a Candle.<br>
+      <em>A Moment</em><br>
+      of <strong>Peace.</strong>
+    </h1>
+    <p class="hero-sub r rd2">
+      GoMo Candles blends the healing power of aromatherapy with the timeless Indian belief in the Evil Eye — bringing calm, positivity and protection into your everyday life.
+    </p>
+    <div class="hero-actions r rd3">
+      <a href="#products" class="btn-p">
+        Explore Products
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a href="https://wa.me/919999999999?text=Hi!%20I%20want%20to%20order%20GoMo%20Candles" target="_blank" rel="noopener" class="btn-wa-lg">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.533 5.854L.057 23.571a.5.5 0 0 0 .613.612l5.76-1.473A11.95 11.95 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.933 0-3.737-.518-5.284-1.42l-.379-.22-3.919 1.001 1.023-3.816-.238-.392A9.959 9.959 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+        Order on WhatsApp
+      </a>
+    </div>
+    <div class="hero-trust r rd4">
+      <div class="trust-item">
+        <div class="trust-num">3</div>
+        <div class="trust-lbl">Signature Products</div>
+      </div>
+      <div class="trust-div"></div>
+      <div class="trust-item">
+        <div class="trust-num">100%</div>
+        <div class="trust-lbl">Natural Fragrances</div>
+      </div>
+      <div class="trust-div"></div>
+      <div class="trust-item">
+        <div class="trust-num">Kolkata</div>
+        <div class="trust-lbl">Handcrafted in India</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-visual r rd2">
+    <div class="eye-stage">
+      <div class="eye-ring er1"></div>
+      <div class="eye-ring er2"></div>
+      <div class="eye-ring er3"></div>
+      <div class="eye-card">
+        <svg width="200" height="130" viewBox="0 0 200 130" fill="none">
+          <path d="M6 65 C38 8,162 8,194 65 C162 122,38 122,6 65Z" fill="#1e3a8a"/>
+          <ellipse cx="100" cy="65" rx="54" ry="40" fill="white"/>
+          <defs>
+            <radialGradient id="iG" cx="45%" cy="38%" r="65%">
+              <stop offset="0%" stop-color="#2d60c8"/>
+              <stop offset="100%" stop-color="#1e3a8a"/>
+            </radialGradient>
+          </defs>
+          <circle cx="100" cy="65" r="30" fill="url(#iG)"/>
+          <circle cx="100" cy="65" r="17" fill="#0f1d50"/>
+          <circle cx="109" cy="55" r="6.5" fill="white" opacity=".95"/>
+          <circle cx="92" cy="71" r="3" fill="white" opacity=".4"/>
+          <circle cx="100" cy="65" r="30" fill="none" stroke="#c8963e" stroke-width="2.5" opacity=".85"/>
+          <line x1="58" y1="36" x2="54" y2="20" stroke="#c8963e" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="78" y1="27" x2="77" y2="11" stroke="#c8963e" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="100" y1="25" x2="100" y2="8" stroke="#c8963e" stroke-width="2" stroke-linecap="round"/>
+          <line x1="122" y1="27" x2="123" y2="11" stroke="#c8963e" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="142" y1="36" x2="146" y2="20" stroke="#c8963e" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="68" y1="96" x2="64" y2="110" stroke="#c8963e" stroke-width="1" stroke-linecap="round" opacity=".5"/>
+          <line x1="100" y1="102" x2="100" y2="118" stroke="#c8963e" stroke-width="1.2" stroke-linecap="round" opacity=".5"/>
+          <line x1="132" y1="96" x2="136" y2="110" stroke="#c8963e" stroke-width="1" stroke-linecap="round" opacity=".5"/>
+        </svg>
+      </div>
+      <div class="mini-card mc-1 r">
+        <span class="mc-dot" style="background:#2d60c8"></span>
+        <div class="mc-info"><span class="mc-name">Evil Eye Candle</span><span class="mc-price">₹499</span></div>
+      </div>
+      <div class="mini-card mc-2 r">
+        <span class="mc-dot" style="background:#7a9e8e"></span>
+        <div class="mc-info"><span class="mc-name">Evil Eye Sachets</span><span class="mc-price">₹299</span></div>
+      </div>
+      <div class="mini-card mc-3 r">
+        <span class="mc-dot" style="background:#c8963e"></span>
+        <div class="mc-info"><span class="mc-name">Bed Mist Spray</span><span class="mc-price">₹349</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PILLARS -->
+<section class="sec-pillars" id="ritual">
+  <div class="pillars-inner">
+    <div>
+      <div class="sec-label r" style="color:var(--ink-muted)">The GoMo Philosophy</div>
+      <h2 class="pillars-heading r rd1">Calm is not a luxury.<br>It is <em>a practice.</em></h2>
+      <p class="pillars-body r rd2">In a world where 11 in every 100 Indian adults face mental health challenges, GoMo Candles believes that small, intentional moments of peace make a real difference — beautifully, simply, every day.</p>
+    </div>
+    <div class="pillar-list">
+      <div class="pillar-card r">
+        <div class="pillar-icon pi-gold">🌿</div>
+        <div><div class="pillar-h">Aromatherapy</div><p class="pillar-p">Carefully selected fragrances that calm the nervous system and create a sanctuary of peace at home.</p></div>
+      </div>
+      <div class="pillar-card r rd1">
+        <div class="pillar-icon pi-blue">🧿</div>
+        <div><div class="pillar-h">Evil Eye (Nazar)</div><p class="pillar-p">Rooted in Indian tradition — our Evil Eye symbolism offers protection and positive energy in every space.</p></div>
+      </div>
+      <div class="pillar-card r rd2">
+        <div class="pillar-icon pi-sage">✨</div>
+        <div><div class="pillar-h">Everyday Self-Care</div><p class="pillar-p">Designed to be a simple, accessible daily ritual — not a weekend indulgence. Light it, breathe, let go.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRODUCTS -->
+<section class="sec-products" id="products">
+  <div class="products-inner">
+    <div class="sec-header">
+      <span class="sec-label r" style="color:var(--gold)">Our Collection</span>
+      <h2 class="sec-title r rd1">Three ways to find your <em>calm</em></h2>
+      <p class="sec-sub r rd2">Each GoMo product is crafted to bring fragrance, protection and peace into a different corner of your life.</p>
+    </div>
+    <div class="products-grid">
+
+      <!-- CANDLE -->
+      <div class="prod-card r">
+        <div class="prod-vis pv-candle">
+          <div class="prod-stars"></div>
+          <span class="prod-tag">Bestseller</span>
+          <div class="candle-wrap" style="margin-bottom:4px">
+            <div class="flame"></div>
+            <div class="wick"></div>
+            <div class="candle-body">
+              <div class="drip d1"></div>
+              <div class="drip d2"></div>
+              <div class="candle-eye">
+                <svg width="36" height="24" viewBox="0 0 200 130" fill="none" opacity=".75">
+                  <path d="M6 65 C38 8,162 8,194 65 C162 122,38 122,6 65Z" fill="rgba(255,255,255,.12)"/>
+                  <ellipse cx="100" cy="65" rx="54" ry="40" fill="rgba(255,255,255,.9)"/>
+                  <circle cx="100" cy="65" r="30" fill="#1e3a8a"/>
+                  <circle cx="100" cy="65" r="17" fill="#0a1030"/>
+                  <circle cx="108" cy="56" r="6" fill="white" opacity=".9"/>
+                  <circle cx="100" cy="65" r="30" fill="none" stroke="#c8963e" stroke-width="3"/>
+                </svg>
+              </div>
+              <div class="candle-band"><span class="candle-txt">GoMo</span></div>
+            </div>
+            <div class="candle-base"></div>
+          </div>
+        </div>
+        <div class="prod-info">
+          <h3 class="prod-name">Evil Eye Candle</h3>
+          <p class="prod-desc">Our signature scented candle — crafted to fill your room with calming fragrance while the iconic Evil Eye design wards off negative energy. Perfect for evenings, meditation or unwinding.</p>
+          <div class="prod-chips">
+            <span class="chip">Long Burn Time</span>
+            <span class="chip">Calming Scent</span>
+            <span class="chip">Nazar Protection</span>
+          </div>
+          <div class="prod-footer">
+            <div class="prod-price-block">
+              <span class="prod-price">₹499</span>
+              <span class="prod-price-sub">Free shipping above ₹999</span>
+            </div>
+            <button class="btn-buy" onclick="orderWA('Evil Eye Candle','₹499')">
+              Buy Now
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SACHETS -->
+      <div class="prod-card r rd1">
+        <div class="prod-vis pv-sachet">
+          <div class="prod-stars"></div>
+          <span class="prod-tag">Room Freshener</span>
+          <div class="sachet-wrap">
+            <div class="sachet-string"></div>
+            <div class="sachet-body">
+              <div class="sachet-top"></div>
+              <div class="sachet-eye">
+                <svg width="40" height="26" viewBox="0 0 200 130" fill="none" opacity=".8">
+                  <path d="M6 65 C38 8,162 8,194 65 C162 122,38 122,6 65Z" fill="rgba(255,255,255,.1)"/>
+                  <ellipse cx="100" cy="65" rx="54" ry="40" fill="rgba(255,255,255,.88)"/>
+                  <circle cx="100" cy="65" r="30" fill="#5a8070"/>
+                  <circle cx="100" cy="65" r="17" fill="#2a4a40"/>
+                  <circle cx="108" cy="56" r="6" fill="white" opacity=".9"/>
+                  <circle cx="100" cy="65" r="30" fill="none" stroke="#c8963e" stroke-width="3"/>
+                </svg>
+              </div>
+              <div class="sachet-txt">GoMo</div>
+            </div>
+            <div class="sachet-tie"></div>
+          </div>
+        </div>
+        <div class="prod-info">
+          <h3 class="prod-name">Evil Eye Sachets</h3>
+          <p class="prod-desc">A subtle, long-lasting room freshener sachet blending aromatherapy with the protective charm of the Evil Eye. Hang in your wardrobe, car or any corner that deserves a little peace.</p>
+          <div class="prod-chips">
+            <span class="chip">30-Day Fragrance</span>
+            <span class="chip">No Flame</span>
+            <span class="chip">Portable</span>
+          </div>
+          <div class="prod-footer">
+            <div class="prod-price-block">
+              <span class="prod-price">₹299</span>
+              <span class="prod-price-sub">Free shipping above ₹999</span>
+            </div>
+            <button class="btn-buy" onclick="orderWA('Evil Eye Sachets','₹299')">
+              Buy Now
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- BED SPRAY -->
+      <div class="prod-card r rd2">
+        <div class="prod-vis pv-spray">
+          <div class="prod-stars"></div>
+          <span class="prod-tag">Sleep Aid</span>
+          <div class="spray-wrap">
+            <div class="mist">
+              <div class="mist-p"></div><div class="mist-p"></div>
+              <div class="mist-p"></div><div class="mist-p"></div>
+              <div class="mist-p"></div>
+            </div>
+            <div class="spray-bottle">
+              <div class="spray-cap"></div>
+              <div class="spray-head">
+                <div class="spray-nozzle"></div>
+                <div class="spray-trigger"></div>
+              </div>
+              <div class="spray-body">
+                <div class="spray-eye">
+                  <svg width="30" height="20" viewBox="0 0 200 130" fill="none" opacity=".75">
+                    <path d="M6 65 C38 8,162 8,194 65 C162 122,38 122,6 65Z" fill="rgba(255,255,255,.1)"/>
+                    <ellipse cx="100" cy="65" rx="54" ry="40" fill="rgba(255,255,255,.85)"/>
+                    <circle cx="100" cy="65" r="30" fill="#c8963e"/>
+                    <circle cx="100" cy="65" r="17" fill="#7a5820"/>
+                    <circle cx="108" cy="56" r="6" fill="white" opacity=".9"/>
+                    <circle cx="100" cy="65" r="30" fill="none" stroke="white" stroke-width="3" opacity=".7"/>
+                  </svg>
+                </div>
+                <div class="spray-txt">GoMo Mist</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="prod-info">
+          <h3 class="prod-name">Bed Mist Spray</h3>
+          <p class="prod-desc">A calming pillow and linen mist designed to ease your transition into sleep. Two sprays on your pillow — close your eyes and let the soothing fragrance guide you to peaceful rest.</p>
+          <div class="prod-chips">
+            <span class="chip">Sleep Enhancing</span>
+            <span class="chip">Non-Staining</span>
+            <span class="chip">Calming Blend</span>
+          </div>
+          <div class="prod-footer">
+            <div class="prod-price-block">
+              <span class="prod-price">₹349</span>
+              <span class="prod-price-sub">Free shipping above ₹999</span>
+            </div>
+            <button class="btn-buy" onclick="orderWA('Bed Mist Spray','₹349')">
+              Buy Now
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- STEPS -->
+<section class="sec-steps">
+  <div class="steps-inner">
+    <div class="sec-header" style="margin-bottom:52px">
+      <span class="sec-label r" style="color:var(--ink-muted)">Your Evening Ritual</span>
+      <h2 class="sec-title r rd1">Four steps to <em>peace</em></h2>
+    </div>
+    <div class="steps-grid">
+      <div class="steps-line"></div>
+      <div class="step r">
+        <div class="step-num">1</div>
+        <h4 class="step-h">Create the Space</h4>
+        <p class="step-p">Find a quiet corner. Dim the lights. Place your GoMo Candle or Sachet where you'll unwind.</p>
+      </div>
+      <div class="step r rd1">
+        <div class="step-num">2</div>
+        <h4 class="step-h">Light &amp; Breathe</h4>
+        <p class="step-p">Light the candle and take three deep breaths. Let the fragrance settle over you like a warm embrace.</p>
+      </div>
+      <div class="step r rd2">
+        <div class="step-num">3</div>
+        <h4 class="step-h">Mist Your Pillow</h4>
+        <p class="step-p">Two sprays of Bed Mist on your pillow. Let the scent prepare your mind for restful sleep.</p>
+      </div>
+      <div class="step r rd3">
+        <div class="step-num">4</div>
+        <h4 class="step-h">Rest &amp; Restore</h4>
+        <p class="step-p">Close your eyes. The Evil Eye watches over you. Wake up lighter, calmer, ready.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STORY DARK -->
+<section class="sec-story" id="story">
+  <div class="sbo sbo-1"></div>
+  <div class="sbo sbo-2"></div>
+  <div class="story-inner">
+    <div>
+      <div class="story-label r">The Story Behind GoMo</div>
+      <h2 class="story-h r rd1">Born from a need for<br><em>everyday calm</em></h2>
+      <p class="story-p r rd2">Nupur Sinha Jana, working in Kolkata's scented candle space, saw a gap — people knew about mental well-being, but there were few simple, beautiful, affordable ways to actually practise it at home.</p>
+      <p class="story-p r rd2">She combined two things she believed in deeply: the science of aromatherapy and the Indian cultural tradition of the Evil Eye — that ancient belief in protection from negative energy that every Indian household understands.</p>
+      <div class="founder-card r rd3">
+        <div class="founder-av">N</div>
+        <div>
+          <div class="founder-name">Nupur Sinha Jana</div>
+          <div class="founder-title">Founder, Earthen Beauty · Kolkata, India</div>
+        </div>
+      </div>
+    </div>
+    <div class="stats-col">
+      <div class="stat-card r">
+        <div class="stat-num">11%</div>
+        <div class="stat-lbl">of Indian adults experience mental health issues — a reality GoMo was built to gently address.</div>
+        <div class="stat-src">Source: Government of India, Nov 2025</div>
+      </div>
+      <div class="stat-card r rd1">
+        <div class="stat-num">42%</div>
+        <div class="stat-lbl">of Gen Z individuals experience depression and anxiety — the generation GoMo speaks to most.</div>
+        <div class="stat-src">Source: Walton Family Foundation</div>
+      </div>
+      <div class="stat-card r rd2">
+        <div class="stat-num">1 ritual</div>
+        <div class="stat-lbl">is all it takes. Light a candle. Breathe. Protect your peace.</div>
+        <div class="stat-src">The GoMo Promise</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="sec-cta" id="shop">
+  <span class="sec-label r" style="color:var(--gold)">Start Today</span>
+  <h2 class="sec-title r rd1">Bring home<br>a little more <em>peace</em></h2>
+  <p class="sec-sub r rd2">GoMo Candles. Where aromatherapy meets tradition. Where self-care becomes a ritual. Where your home becomes a sanctuary.</p>
+  <div class="cta-actions r rd3">
+    <a href="#products" class="btn-p" style="font-size:1.0625rem;padding:18px 40px">
+      Shop All Products
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+    <a href="https://wa.me/919999999999?text=Hi!%20I%20want%20to%20order%20GoMo%20Candles" target="_blank" rel="noopener" class="btn-wa-lg">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.533 5.854L.057 23.571a.5.5 0 0 0 .613.612l5.76-1.473A11.95 11.95 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.933 0-3.737-.518-5.284-1.42l-.379-.22-3.919 1.001 1.023-3.816-.238-.392A9.959 9.959 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+      Order via WhatsApp
+    </a>
+    <a href="https://instagram.com/gomocandles" target="_blank" rel="noopener" class="btn-s">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+      Follow on Instagram
+    </a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div>
+        <div class="footer-logo">
+          <svg width="22" height="22" viewBox="0 0 28 28" fill="none">
+            <ellipse cx="14" cy="14" rx="12" ry="8" fill="#1e3a8a"/>
+            <circle cx="14" cy="14" r="4.5" fill="white"/>
+            <circle cx="14" cy="14" r="2.5" fill="#1e3a8a"/>
+            <ellipse cx="14" cy="14" rx="12" ry="8" fill="none" stroke="#c8963e" stroke-width="1.5"/>
+          </svg>
+          GoMo Candles
+        </div>
+        <p class="footer-desc">More Than a Candle. A Moment of Peace. Handcrafted in Kolkata — blending aromatherapy with the timeless wisdom of the Evil Eye.</p>
+        <div class="footer-socials">
+          <a href="https://wa.me/919999999999" target="_blank" rel="noopener" class="fsoc" title="WhatsApp">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.533 5.854L.057 23.571a.5.5 0 0 0 .613.612l5.76-1.473A11.95 11.95 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.933 0-3.737-.518-5.284-1.42l-.379-.22-3.919 1.001 1.023-3.816-.238-.392A9.959 9.959 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+          </a>
+          <a href="https://instagram.com/gomocandles" target="_blank" rel="noopener" class="fsoc" title="Instagram">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+          </a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h5>Products</h5>
+        <ul>
+          <li><a href="#products">Evil Eye Candle — ₹499</a></li>
+          <li><a href="#products">Evil Eye Sachets — ₹299</a></li>
+          <li><a href="#products">Bed Mist Spray — ₹349</a></li>
+          <li><a href="https://wa.me/919999999999">Gift Sets</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Company</h5>
+        <ul>
+          <li><a href="#story">Our Story</a></li>
+          <li><a href="#story">Earthen Beauty</a></li>
+          <li><a href="mailto:hello@gomocandles.in">Contact Us</a></li>
+          <li><a href="#">Press</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Help</h5>
+        <ul>
+          <li><a href="https://wa.me/919999999999">Order via WhatsApp</a></li>
+          <li><a href="#">Shipping Info</a></li>
+          <li><a href="#">Returns Policy</a></li>
+          <li><a href="#">Privacy Policy</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-copy">© 2025 GoMo Candles. All rights reserved.</div>
+      <div class="footer-brand">A brand by <a href="#">Earthen Beauty</a> · Kolkata, India</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if(e.isIntersecting){ e.target.classList.add('vis'); obs.unobserve(e.target); } });
+}, { threshold:0.1 });
+document.querySelectorAll('.r').forEach(el => obs.observe(el));
+setTimeout(() => { document.querySelectorAll('.hero .r').forEach(el => el.classList.add('vis')); }, 80);
+
+function toggleNav(){ document.body.classList.toggle('nav-open'); }
+document.addEventListener('click', e => { if(!e.target.closest('nav')) document.body.classList.remove('nav-open'); });
+
+const navEl = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  navEl.style.padding = window.scrollY > 60 ? '12px 56px' : '18px 56px';
+}, { passive:true });
+
+function orderWA(product, price){
+  const msg = encodeURIComponent('Hi! I\'d like to order the ' + product + ' (' + price + ') from GoMo Candles. Please share details.');
+  window.open('https://wa.me/919999999999?text=' + msg, '_blank');
+}
+</script>
+</body>
+</html>
