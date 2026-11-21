@@ -7,7 +7,7 @@ import { applyMediaChanges, mediaBase, planProductImages } from './media.js';
 import { otpChannels } from './otp.js';
 
 const toImages = (imgs) => values(imgs).filter((i) => i && i.id && i.web).map((i) => ({
-  id: i.id, alt: i.alt || '', w: i.w || null, h: i.h || null, color: i.color || null, web: i.web, thumb: i.thumb || i.web,
+  id: i.id, alt: i.alt || '', w: i.w || null, h: i.h || null, color: i.transparent ? null : i.color || null, transparent: !!i.transparent, web: i.web, thumb: i.thumb || i.web,
 }));
 
 const toProduct = (r) => ({

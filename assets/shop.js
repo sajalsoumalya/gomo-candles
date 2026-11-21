@@ -196,9 +196,9 @@
     var src = opts.square && img.sq ? (opts.tiny && img.sq_small ? img.sq_small : img.sq) : (opts.big ? img.web : img.thumb || img.web);
     var srcset = opts.big || opts.square ? '' : ' srcset="' + esc(mediaUrl(img.thumb || img.web)) + ' 700w, ' + esc(mediaUrl(img.web)) + ' 1400w" sizes="' + (opts.sizes || '(max-width:640px) 92vw, (max-width:980px) 46vw, 300px') + '"';
     var size = opts.square && img.sq ? ' width="480" height="480"' : (img.w && img.h ? ' width="' + img.w + '" height="' + img.h + '"' : '');
-    return '<img class="' + (opts.cls || 'photo') + (img.studio ? ' studio' : '') + '" src="' + esc(mediaUrl(src)) + '"' + srcset + size +
+    return '<img class="' + (opts.cls || 'photo') + (img.studio ? ' studio' : '') + (img.transparent ? ' is-cutout' : '') + '" src="' + esc(mediaUrl(src)) + '"' + srcset + size +
       ' alt="' + esc(opts.decorative ? '' : (img.alt || opts.alt || '')) + '" loading="' + (opts.eager ? 'eager' : 'lazy') + '" decoding="async"' +
-      (img.color ? ' style="background:' + esc(img.color) + '"' : '') + '>';
+      (img.color && !img.transparent ? ' style="background:' + esc(img.color) + '"' : '') + '>';
   }
   function isTrio(o) {
     return o.items.length === 3 && o.items.map(function (i) { return i.art; }).sort().join(',') === 'candle,sachet,spray';
@@ -207,7 +207,7 @@
   function productArt(p) { return hasPhoto(p) ? photoImg(p.images[0], { cls: 'thumb-photo', alt: p.name, square: true, tiny: true }) : useSvg(ART[p.art] || ART.candle); }
   function offerArt(o, small) {
     // The offer's own photos (Admin → Offers) come first.
-    if (o.images && o.images.length && o.images[0].web) return '<div class="offer-photo own">' + photoImg(o.images[0], { cls: 'photo', alt: o.name, square: !!small, tiny: small }) + '</div>';
+    if (o.images && o.images.length && o.images[0].web) return '<div class="offer-photo own' + (o.images[0].transparent ? ' cutout' : '') + '">' + photoImg(o.images[0], { cls: 'photo', alt: o.name, square: !!small, tiny: small }) + '</div>';
     if (o.type !== 'pack' && isTrio(o)) {
       return small
         ? '<img class="thumb-photo cutout" src="' + COMBO_IMG.sq_small + '" width="160" height="160" alt="" loading="lazy">'

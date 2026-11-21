@@ -56,7 +56,7 @@ function publicMedia(m) {
 
 /** Image entry as stored on a product and sent to the shop. */
 export function productImage(m, alt) {
-  return { id: m.id, alt: alt ?? m.alt ?? '', w: m.w || null, h: m.h || null, color: m.color || null,
+  return { id: m.id, alt: alt ?? m.alt ?? '', w: m.w || null, h: m.h || null, color: m.transparent ? null : m.color || null, transparent: !!m.transparent,
     web: m.variants?.web?.key || m.variants?.original?.key, thumb: m.variants?.thumb?.key || m.variants?.web?.key || m.variants?.original?.key };
 }
 
@@ -105,7 +105,8 @@ export async function adminCreateMedia(request, env) {
   const rec = {
     id, product_id: productId, status: 'uploading', filename: String(body.filename || '').slice(0, 120), sha256,
     alt: String(body.alt || '').slice(0, 140), w: Number(body.w) || null, h: Number(body.h) || null,
-    color: /^#[0-9a-f]{6}$/i.test(body.color || '') ? body.color : null,
+    color: body.transparent === true ? null : /^#[0-9a-f]{6}$/i.test(body.color || '') ? body.color : null,
+    transparent: body.transparent === true,
     created_at: new Date(now).toISOString(), updated_at: new Date(now).toISOString(), expires_at: now + UPLOADING_TTL, variants,
   };
   await d.put(mediaPath(id), rec);

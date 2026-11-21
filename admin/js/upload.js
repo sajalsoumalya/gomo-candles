@@ -49,6 +49,19 @@ async function scaled(bitmap, max, quality) {
   return { blob, w, h, canvas: c };
 }
 
+/** True if the photo has see-through parts (e.g. a cut-out product on no background). */
+function hasTransparency(canvas) {
+  const c = document.createElement('canvas');
+  const s = Math.min(1, 160 / Math.max(canvas.width, canvas.height));
+  c.width = Math.max(1, Math.round(canvas.width * s)); c.height = Math.max(1, Math.round(canvas.height * s));
+  const g = c.getContext('2d');
+  g.drawImage(canvas, 0, 0, c.width, c.height);
+  const px = g.getImageData(0, 0, c.width, c.height).data;
+  let clear = 0;
+  for (let i = 3; i < px.length; i += 4) if (px[i] < 230) clear++;
+  return clear / (px.length / 4) > 0.01;
+}
+
 function dominantColor(canvas) {
   const c = document.createElement('canvas');
   c.width = 1; c.height = 1;
@@ -77,9 +90,10 @@ export async function prepare(file) {
   }
   if (bitmap.width < 300 || bitmap.height < 300) throw new UploadError('This photo is too small. Use at least 600 × 600 pixels for a sharp product photo.');
   const [web, thumb, sha] = await Promise.all([scaled(bitmap, WEB_MAX, 0.85), scaled(bitmap, THUMB_MAX, 0.8), sha256(file)]);
-  const color = dominantColor(thumb.canvas);
+  const transparent = hasTransparency(thumb.canvas);
+  const color = transparent ? null : dominantColor(thumb.canvas);
   bitmap.close?.();
-  return { file, sha, web: web.blob, thumb: thumb.blob, w: web.w, h: web.h, color, preview: URL.createObjectURL(thumb.blob) };
+  return { file, sha, web: web.blob, thumb: thumb.blob, w: web.w, h: web.h, color, transparent, preview: URL.createObjectURL(thumb.blob) };
 }
 
 // ---------------------------------------------------------------- transport
@@ -134,7 +148,7 @@ export async function upload(prep, opts) {
     const created = await api('/api/admin/media', {
       method: 'POST',
       body: {
-        product_id: productId, filename: prep.file.name, sha256: prep.sha, w: prep.w, h: prep.h, color: prep.color, alt: opts.alt || '',
+        product_id: productId, filename: prep.file.name, sha256: prep.sha, w: prep.w, h: prep.h, color: prep.color, transparent: !!prep.transparent, alt: opts.alt || '',
         allow_duplicate: !!opts.allowDuplicate,
         variants: Object.fromEntries(Object.entries(blobs).map(([k, b]) => [k, { type: b.type, size: b.size }])),
       },
