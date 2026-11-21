@@ -2,6 +2,9 @@ import { HttpError, hmacSha256Hex, timingSafeEqual } from './util.js';
 
 const API = 'https://api.razorpay.com/v1';
 
+// Every Razorpay call gives up after 15 s, so a slow Razorpay never leaves a request (or a refund) hanging.
+const timeout = () => (typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined);
+
 export function razorpayConfigured(env) {
   return Boolean(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET);
 }
@@ -11,6 +14,7 @@ export async function createRazorpayOrder(env, { amount, receipt, notes }, fetch
   if (!razorpayConfigured(env)) throw new HttpError(503, 'Online payment is not available right now.');
   const res = await fetchImpl(`${API}/orders`, {
     method: 'POST',
+    signal: timeout(),
     headers: {
       'content-type': 'application/json',
       authorization: 'Basic ' + btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`),
@@ -57,7 +61,7 @@ const rzpMessage = (data, status) => String(data?.error?.description || data?.er
 /** All payment attempts on a Razorpay order (GET /orders/:id/payments). Throws if Razorpay can't be reached. */
 export async function fetchOrderPayments(env, rzpOrderId, fetchImpl = fetch) {
   if (!razorpayConfigured(env)) throw new HttpError(503, 'Razorpay is not connected.');
-  const res = await fetchImpl(`${API}/orders/${encodeURIComponent(rzpOrderId)}/payments`, { headers: { authorization: basicAuth(env) } });
+  const res = await fetchImpl(`${API}/orders/${encodeURIComponent(rzpOrderId)}/payments`, { headers: { authorization: basicAuth(env) }, signal: timeout() });
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new HttpError(502, `Couldn't check the payment with Razorpay: ${rzpMessage(data, res.status)}`);
   return Array.isArray(data?.items) ? data.items : [];
@@ -73,6 +77,7 @@ export async function createRefund(env, paymentId, { amount, idempotencyKey, not
   const res = await fetchImpl(`${API}/payments/${encodeURIComponent(paymentId)}/refund`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: basicAuth(env), 'x-refund-idempotency': idempotencyKey },
+    signal: timeout(),
     body: JSON.stringify({ amount: Math.round(amount * 100), speed: 'normal', notes, receipt }),
   });
   const data = await res.json().catch(() => null);
@@ -82,7 +87,7 @@ export async function createRefund(env, paymentId, { amount, idempotencyKey, not
 /** Current state of a refund: pending | processed | failed. */
 export async function fetchRefund(env, paymentId, refundId, fetchImpl = fetch) {
   if (!razorpayConfigured(env)) throw new HttpError(503, 'Razorpay is not connected.');
-  const res = await fetchImpl(`${API}/payments/${encodeURIComponent(paymentId)}/refunds/${encodeURIComponent(refundId)}`, { headers: { authorization: basicAuth(env) } });
+  const res = await fetchImpl(`${API}/payments/${encodeURIComponent(paymentId)}/refunds/${encodeURIComponent(refundId)}`, { headers: { authorization: basicAuth(env) }, signal: timeout() });
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new HttpError(502, `Couldn't read the refund from Razorpay: ${rzpMessage(data, res.status)}`);
   return data;

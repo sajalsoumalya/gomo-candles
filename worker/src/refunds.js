@@ -49,7 +49,7 @@ export async function reconcilePayment(env, ctx, orderNo, actor = 'system', f = 
   const found = await loadOrder(env, orderNo);
   if (!found) throw new HttpError(404, 'Order not found.');
   const { order } = found;
-  if (order.payment_method !== 'razorpay') return { paid: false, state: 'not_online' };
+  if (order.payment_method !== 'razorpay' && !razorpayOrderIds(order).length) return { paid: false, state: 'not_online' };
   if (order.payment_status === 'paid' || order.payment_status === 'refunded') return { paid: true, state: 'paid', payment_id: order.razorpay_payment_id || null, already: true };
   let authorized = false;
   for (const id of razorpayOrderIds(order)) {
@@ -85,7 +85,11 @@ export async function adminCheckPayment(env, ctx, orderNo, admin) {
 
 // ------------------------------------------------------------------ refunds
 
-const canRefundAgain = (status) => !status || status === 'review' || status === 'failed';
+const STALE_CLAIM_MS = 2 * 60 * 1000;
+// 'processing' with no Razorpay refund id and an old claim = the request died half-way (database or Worker error).
+// Pressing again is safe: the same attempt reuses the same idempotency key, so Razorpay never refunds twice.
+const canRefundAgain = (rf, now = Date.now()) => !rf?.status || rf.status === 'review' || rf.status === 'failed'
+  || (rf.status === 'processing' && !rf.refund_id && (!rf.claimed_at || now - Date.parse(rf.claimed_at) > STALE_CLAIM_MS));
 
 /** Admin: "Process refund". Body: { amount?, note? } (amount in whole rupees, defaults to the full total). */
 export async function adminProcessRefund(request, env, orderNo, admin, f = fetch) {
@@ -94,7 +98,7 @@ export async function adminProcessRefund(request, env, orderNo, admin, f = fetch
   const found = await loadOrder(env, orderNo);
   if (!found) throw new HttpError(404, 'Order not found.');
   const { order } = found;
-  if (order.payment_method !== 'razorpay') throw new HttpError(409, 'This is a Cash on Delivery order: there is no online payment to refund.');
+  if (order.payment_method !== 'razorpay' && !order.razorpay_payment_id) throw new HttpError(409, 'This is a Cash on Delivery order: there is no online payment to refund.');
   if (order.payment_status === 'refunded') throw new HttpError(409, 'This order is already refunded.');
   if (order.payment_status !== 'paid' || !order.razorpay_payment_id) throw new HttpError(409, 'No captured online payment is recorded for this order. Press "Check payment with Razorpay" first.');
   if (order.status !== 'cancelled' && order.refund?.status !== 'review') throw new HttpError(409, 'Cancel the order first, then process the refund.');
@@ -107,16 +111,16 @@ export async function adminProcessRefund(request, env, orderNo, admin, f = fetch
   }
 
   // Claim the refund exactly once (two admins, double click): review/failed → processing.
-  const statusPath = `orders/${orderNo}/refund/status`;
-  const { value: current, etag } = await d.getWithEtag(statusPath);
-  if (!canRefundAgain(current)) throw new HttpError(409, current === 'processed' ? 'This order is already refunded.' : 'A refund for this order has already been started.');
-  if (!(await d.putIfMatch(statusPath, 'processing', etag))) throw new HttpError(409, 'Someone else just started this refund. Refresh the page.');
+  const refundPath = `orders/${orderNo}/refund`;
+  const { value: current, etag } = await d.getWithEtag(refundPath);
+  if (!canRefundAgain(current)) throw new HttpError(409, current?.status === 'processed' ? 'This order is already refunded.' : 'A refund for this order has already been started.');
+  if (!(await d.putIfMatch(refundPath, { ...(current || {}), status: 'processing', claimed_at: nowIso() }, etag))) throw new HttpError(409, 'Someone else just started this refund. Refresh the page.');
 
-  const prev = order.refund || {};
+  const prev = current || {};
   const attempt = prev.attempt || 1;
   // Same key for the same attempt: a retry after a timeout can never create a second refund.
   const idempotencyKey = `gomo-${orderNo}-refund-${attempt}`;
-  const base = { ...prev, status: 'processing', amount, attempt, initiated_at: nowIso(), initiated_by: admin?.email || null, error: null };
+  const base = { ...prev, status: 'processing', claimed_at: null, amount, attempt, initiated_at: nowIso(), initiated_by: admin?.email || null, error: null };
   let r;
   try {
     r = await createRefund(env, order.razorpay_payment_id, { amount, idempotencyKey, receipt: `${orderNo}-R${attempt}`, notes: { order_no: orderNo, reason: String(body.note || prev.reason || '').slice(0, 200) } }, f);
@@ -124,6 +128,11 @@ export async function adminProcessRefund(request, env, orderNo, admin, f = fetch
     // No answer from Razorpay: back to review with the same attempt number, so pressing again reuses the key.
     await d.patch(`orders/${orderNo}`, { refund: { ...base, status: prev.status === 'failed' ? 'failed' : 'review', error: 'Razorpay did not answer. Press Process refund again (it will not refund twice).' }, updated_at: nowIso() });
     throw new HttpError(502, 'Razorpay did not answer. Press Process refund again — it will not refund twice.');
+  }
+  const definite = r.status >= 400 && r.status < 500 && r.status !== 409 && r.status !== 429;
+  if (!r.ok && !definite) {
+    await d.patch(`orders/${orderNo}`, { refund: { ...base, status: prev.status === 'failed' ? 'failed' : 'review', error: `Razorpay was not sure (${r.message}). Press Process refund again (it will not refund twice).` }, updated_at: nowIso() });
+    throw new HttpError(502, `Razorpay was not sure: ${r.message}. Press Process refund again — it will not refund twice.`);
   }
   if (!r.ok) {
     await d.patch(`orders/${orderNo}`, {

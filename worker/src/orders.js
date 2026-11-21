@@ -243,16 +243,53 @@ export async function expireUnpaidOrders(env, { now = Date.now(), minutes = UNPA
       expired_unpaid: true, stock_released: released || null, updated_at: nowIso(),
       [`events/${pushKey()}`]: event('status', 'cancelled', `Online payment not completed within ${minutes} minutes. Stock released.`, 'system'),
     });
+    // A payment may have landed between our check and the cancel (markPaid then saw the order still "placed").
+    if ((await d.get(`orders/${no}/payment_status`)) === 'paid') {
+      await restorePaidAfterCancel(env, ctx, no, 'system');
+      out.restored = [...(out.restored || []), no];
+      continue;
+    }
     out.expired.push(no);
   }
   return out;
 }
 
 /** Mark an online order paid exactly once (compare-and-set), then notify. */
+/**
+ * A paid order that is cancelled. If it only expired for being unpaid and the stock is still there, it comes back;
+ * otherwise it goes to "Refund: awaiting review". Either way the admin is told.
+ */
+async function restorePaidAfterCancel(env, ctx, orderNo, actor) {
+  const d = db(env);
+  const { order } = await loadOrder(env, orderNo);
+  if (order.status !== 'cancelled') return false;
+  const need = order.stock_released;
+  const back = order.expired_unpaid && (!need || (await reserveStock(env, need)).ok);
+  await d.patch(`orders/${orderNo}`, back
+    ? { status: 'placed', stock_held: need || null, stock_released: null, expired_unpaid: null, updated_at: nowIso(),
+        [`events/${pushKey()}`]: event('status', 'placed', 'Payment arrived after the order had expired, so it was restored.', actor) }
+    : { payment_attention: true, updated_at: nowIso(), ...refundReviewFields(order, 'Paid after the order was cancelled'),
+        [`events/${pushKey()}`]: event('note', null, 'Paid after the order was cancelled. Refund awaiting review.', actor) });
+  const fresh = await loadOrder(env, orderNo);
+  background(ctx, notifyOrderEvent(env, fresh.order, fresh.items, 'order_placed', { admin: true }));
+  return back;
+}
+
 export async function markPaid(env, ctx, orderNo, paymentId, actor, { amount, source } = {}) {
   const d = db(env);
   const { value, etag } = await d.getWithEtag(`orders/${orderNo}/payment_status`);
-  if (!value || value === 'paid' || value === 'refunded') return false;
+  if (value === 'paid' || value === 'refunded') {
+    // Already paid. A different captured payment = the customer was charged twice: record it once and flag it.
+    const known = await d.get(`orders/${orderNo}/razorpay_payment_id`);
+    if (paymentId && known && paymentId !== known && paymentId !== 'webhook' && !(await d.get(`orders/${orderNo}/extra_payments/${safeKey(paymentId)}`))) {
+      await d.patch(`orders/${orderNo}`, {
+        [`extra_payments/${safeKey(paymentId)}`]: { at: nowIso(), amount: amount ?? null, source: source || actor || null }, payment_attention: true, updated_at: nowIso(),
+        [`events/${pushKey()}`]: event('payment', null, `Second online payment captured (${paymentId}${amount != null ? `, ₹${amount}` : ''}). The customer paid twice: refund this one from the Razorpay dashboard.`, actor),
+      });
+    }
+    return false;
+  }
+  if (!value) return false;
   if (!(await d.putIfMatch(`orders/${orderNo}/payment_status`, 'paid', etag))) return false;
   const total = await d.get(`orders/${orderNo}/total`);
   const short = amount != null && Number(amount) !== Number(total);
@@ -262,18 +299,13 @@ export async function markPaid(env, ctx, orderNo, paymentId, actor, { amount, so
     [`events/${pushKey()}`]: event('payment', null, `Paid online (${paymentId})${source ? ` · found by ${source}` : ''}${short ? ` · amount ₹${amount} differs from the order total ₹${total}` : ''}`, actor),
   });
   let fresh = await loadOrder(env, orderNo);
-  if (fresh.order.status === 'cancelled') {
-    // Paid after the order was cancelled. An order that only expired for being unpaid comes back if the stock is still there.
-    const need = fresh.order.stock_released;
-    const back = fresh.order.expired_unpaid && (!need || (await reserveStock(env, need)).ok);
-    await d.patch(`orders/${orderNo}`, back
-      ? { status: 'placed', stock_held: need || null, stock_released: null, expired_unpaid: null, updated_at: nowIso(),
-          [`events/${pushKey()}`]: event('status', 'placed', 'Payment arrived after the order had expired, so it was restored.', actor) }
-      : { payment_attention: true, updated_at: nowIso(), ...refundReviewFields(fresh.order, 'Paid after the order was cancelled'),
-          [`events/${pushKey()}`]: event('note', null, 'Paid after the order was cancelled. Refund awaiting review.', actor) });
+  if (fresh.order.payment_method === 'cod') {
+    // Paid online after switching to Cash on Delivery: make it a prepaid order again so nobody collects cash.
+    await d.patch(`orders/${orderNo}`, { payment_method: 'razorpay', payment_attention: true, updated_at: nowIso(),
+      [`events/${pushKey()}`]: event('payment', null, `Paid online after switching to Cash on Delivery. Do NOT collect cash. Order total is ₹${fresh.order.total}; check the paid amount and refund any difference.`, actor) });
     fresh = await loadOrder(env, orderNo);
-    if (!back) { background(ctx, notifyOrderEvent(env, fresh.order, fresh.items, 'order_placed', { admin: true })); return true; }
   }
+  if (fresh.order.status === 'cancelled') { await restorePaidAfterCancel(env, ctx, orderNo, actor); return true; }
   background(ctx, notifyOrderEvent(env, fresh.order, fresh.items, 'order_placed', { admin: true }));
   return true;
 }
@@ -343,6 +375,13 @@ export async function switchToCod(request, env, ctx, orderNo) {
   }
   const settings = await getSettings(env);
   if (!settings.payments.cod) throw new HttpError(422, 'Cash on Delivery is not available right now.');
+  // The payment may have gone through even though the browser never said so: never let a paid customer pay cash too.
+  const check = await reconcilePayment(env, ctx, orderNo, 'customer').catch(() => ({ state: 'unknown' }));
+  if (check.paid) {
+    const paid = await loadOrder(env, orderNo);
+    return json({ order: publicSummary(paid.order, paid.items), already_paid: true });
+  }
+  if (check.state === 'authorized') throw new HttpError(409, 'Your bank has approved a payment for this order. Please wait a few minutes; it will be confirmed automatically.', { code: 'payment_authorized' });
   // free / cheaper prepaid delivery no longer applies: charge the Cash on Delivery fee
   let shipping = order.shipping || 0;
   const couponType = order.coupon_code ? (await db(env).get(`coupons/${order.coupon_code}/type`)) : null;
@@ -401,7 +440,7 @@ export async function razorpayWebhook(request, env, ctx) {
     const rzpOrderId = pay?.order_id || evt.payload?.order?.entity?.id;
     if (rzpOrderId) {
       const orderNo = await db(env).get(`order_index/rzp/${safeKey(rzpOrderId)}`);
-      if (orderNo) await markPaid(env, ctx, orderNo, String(pay?.id || 'webhook').slice(0, 64), 'razorpay');
+      if (orderNo) await markPaid(env, ctx, orderNo, String(pay?.id || 'webhook').slice(0, 64), 'razorpay', { amount: pay?.amount != null ? Math.round(Number(pay.amount)) / 100 : undefined });
     }
   }
   return json({ ok: true });

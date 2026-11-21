@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { expireUnpaidOrders, adminUpdateOrder, retryPayment, razorpayWebhook } from '../src/orders.js';
+import { expireUnpaidOrders, adminUpdateOrder, retryPayment, razorpayWebhook, switchToCod, markPaid } from '../src/orders.js';
 import { reconcilePayment, adminProcessRefund, adminRefreshRefund } from '../src/refunds.js';
 import { areaFor } from '../src/staff.js';
 import { hmacSha256Hex } from '../src/util.js';
@@ -188,7 +188,7 @@ describe('refunds: cancelled prepaid order → awaiting review → admin confirm
   it('partial refunds stay within the order total; COD orders cannot be refunded online', async () => {
     const { env: e } = env(paid({ status: 'cancelled', refund: { status: 'review', amount: 799 } }));
     await expect(adminProcessRefund(req({ amount: 900 }), e, NO, admin, razorpay().f)).rejects.toMatchObject({ status: 422 });
-    const { env: e2 } = env(paid({ status: 'cancelled', payment_method: 'cod' }));
+    const { env: e2 } = env(paid({ status: 'cancelled', payment_method: 'cod', razorpay_payment_id: null, payment_status: 'pending' }));
     await expect(adminProcessRefund(req({}), e2, NO, admin, razorpay().f)).rejects.toMatchObject({ status: 409 });
   });
 
@@ -196,5 +196,68 @@ describe('refunds: cancelled prepaid order → awaiting review → admin confirm
     expect(areaFor('POST', `/api/admin/orders/${NO}/refund`)).toBe('payments_edit');
     expect(areaFor('POST', `/api/admin/orders/${NO}/refund/refresh`)).toBe('orders');
     expect(areaFor('POST', `/api/admin/orders/${NO}/check-payment`)).toBe('orders');
+  });
+});
+
+describe('payment and refund edge cases (22 Nov fixes)', () => {
+  const paid = (extra) => base({ payment_status: 'paid', razorpay_payment_id: 'pay_P', status: 'confirmed', ...extra });
+  it('a refund stuck in processing without a refund id can be pressed again after 2 minutes, with the same key', async () => {
+    const old = new Date(Date.now() - 5 * 60000).toISOString();
+    const { m, env: e } = env(paid({ status: 'cancelled', refund: { status: 'processing', amount: 799, attempt: 1, claimed_at: old } }));
+    const rz = razorpay({ refunds: [res(200, { id: 'rfnd_9', entity: 'refund', status: 'processed', amount: 79900 })] });
+    await adminProcessRefund(req({}), e, NO, admin, rz.f);
+    expect(m.root.orders[NO].refund.status).toBe('processed');
+    const call = rz.calls.find((c) => /\/refund$/.test(c.url));
+    expect(call.init.headers['x-refund-idempotency']).toBe(`gomo-${NO}-refund-1`);
+  });
+  it('a fresh processing claim is still protected', async () => {
+    const { env: e } = env(paid({ status: 'cancelled', refund: { status: 'processing', amount: 799, attempt: 1, claimed_at: new Date().toISOString() } }));
+    await expect(adminProcessRefund(req({}), e, NO, admin, razorpay().f)).rejects.toMatchObject({ status: 409 });
+  });
+  it('a Razorpay 5xx keeps the same attempt (no second refund on retry)', async () => {
+    const { m, env: e } = env(paid({ status: 'cancelled', refund: { status: 'review', amount: 799, attempt: 1 } }));
+    await expect(adminProcessRefund(req({}), e, NO, admin, razorpay({ refunds: [res(502, { error: { description: 'Bad gateway' } })] }).f)).rejects.toMatchObject({ status: 502 });
+    expect(m.root.orders[NO].refund.attempt).toBe(1);
+    expect(m.root.orders[NO].refund.status).toBe('review');
+  });
+  it('a second captured payment on a paid order is recorded and flagged', async () => {
+    const { m, env: e } = env(paid({ razorpay_payment_id: 'pay_1' }));
+    expect(await markPaid(e, null, NO, 'pay_2', 'razorpay', { amount: 799 })).toBe(false);
+    expect(m.root.orders[NO].payment_attention).toBe(true);
+    expect(Object.keys(m.root.orders[NO].extra_payments)).toEqual(['pay_2']);
+    await markPaid(e, null, NO, 'pay_2', 'razorpay', { amount: 799 }); // the webhook again: recorded once
+    expect(Object.values(m.root.orders[NO].events).filter((x) => /Second online payment/.test(x.note))).toHaveLength(1);
+  });
+  it('switch to COD finds an online payment first and keeps the order prepaid', async () => {
+    const { m, env: e } = env(base(), { });
+    vi.stubGlobal('fetch', razorpay({ payments: { order_OLD: [{ id: 'pay_E', status: 'captured', amount: 79900 }] } }).f);
+    m.root.settings = { payments: { cod: true, razorpay: true } };
+    const r = await (await switchToCod(req({ phone: '9876543210' }), e, null, NO)).json();
+    expect(r.already_paid).toBe(true);
+    expect(m.root.orders[NO].payment_method).toBe('razorpay');
+    expect(m.root.orders[NO].payment_status).toBe('paid');
+  });
+  it('a payment arriving on an order already switched to COD turns it back to prepaid and flags it', async () => {
+    const { m, env: e } = env(base({ payment_method: 'cod' }));
+    await markPaid(e, null, NO, 'pay_F', 'razorpay', { amount: 799 });
+    expect(m.root.orders[NO].payment_method).toBe('razorpay');
+    expect(m.root.orders[NO].payment_attention).toBe(true);
+  });
+});
+
+describe('expiry and payment at the same moment', () => {
+  it('a payment landing while the order is being cancelled restores it', async () => {
+    const { m, env: e } = env(base({ stock_held: null }));
+    vi.stubGlobal('fetch', razorpay().f); // Razorpay: nothing captured yet
+    const real = e.__db.putIfMatch;
+    e.__db.putIfMatch = async (p, v, etag) => {
+      const ok = await real(p, v, etag);
+      if (ok && p === `orders/${NO}/status` && v === 'cancelled') m.root.orders[NO].payment_status = 'paid'; // verify-payment lands now
+      return ok;
+    };
+    const r = await expireUnpaidOrders(e, { now: Date.parse('2026-11-22T11:00:00Z') });
+    expect(r.expired).toEqual([]);
+    expect(r.restored).toEqual([NO]);
+    expect(m.root.orders[NO].status).toBe('placed');
   });
 });
