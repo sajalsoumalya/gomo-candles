@@ -511,57 +511,87 @@
     requestAnimationFrame(loop);
   }
 
-  // ------------------------------------------------------------------ calm scrolling
-  // A fast mouse-wheel / trackpad flick or a hard swipe would otherwise carry the reader past a whole scene in a second.
-  // The page's own scroll is eased and speed-limited (about 0.8 screen-heights per second), so every moment plays out.
-  // Keyboard, scrollbar dragging and links keep their native behaviour.
+  // ------------------------------------------------------------------ auto-play scrolling
+  // One wheel step, trackpad flick or swipe plays the whole section by itself: the page glides slowly and steadily
+  // until that section's effect has finished (wardrobe fully open, candle lit, mist settled), then waits for the next one.
+  // Scrolling the other way plays back to the previous stop. Keys, the scrollbar, links or a tap stop it at once.
   const calm = (() => {
     if (reduced) return null;
-    const MAX_VH_PER_S = 0.8;      // top speed
-    const WHEEL = 0.55;            // fraction of each wheel step that is applied
-    let target = scrollY, cur = scrollY, active = false, setByUs = -1, lastT = 0;
+    const SPEED = 0.5;   // screen-heights per second at full glide
+    const ACCEL = 0.9;   // screen-heights per second², for a soft start and a soft stop
+    let dir = 0, goal = 0, cur = scrollY, v = 0, lastT = 0, setByUs = -1, running = false;
     const maxY = () => document.documentElement.scrollHeight - innerHeight;
-    const clampY = (y) => Math.max(0, Math.min(maxY(), y));
+    // Stops: top of page, the end of every scene, bottom of the page.
+    function stops() {
+      const list = [0, maxY()];
+      scenes.forEach(sc => list.push(sc.el.offsetTop + sc.el.offsetHeight - innerHeight));
+      return [...new Set(list.map(y => Math.round(Math.max(0, Math.min(maxY(), y)))))].sort((x, y) => x - y);
+    }
+    function nextStop(from, d) {
+      const l = stops();
+      return d > 0 ? (l.find(y => y > from + 4) ?? maxY()) : ([...l].reverse().find(y => y < from - 4) ?? 0);
+    }
+    function stop() { running = false; dir = 0; v = 0; lastT = 0; }
     function run(now) {
+      if (!running) return;
       const dt = Math.min(.05, (now - (lastT || now)) / 1000); lastT = now;
-      const diff = target - cur;
-      if (Math.abs(diff) < .5) { cur = target; active = false; lastT = 0; return; }
-      const cap = MAX_VH_PER_S * innerHeight * Math.max(dt, 1 / 120);
-      let step = diff * (1 - Math.exp(-dt * 7));
-      if (Math.abs(step) > cap) step = Math.sign(step) * cap;
-      cur += step;
+      const H = innerHeight, left = (goal - cur) * dir;
+      if (left <= .5) { cur = goal; setByUs = Math.round(cur); scrollTo(0, cur); stop(); return; }
+      // speed up gently, cruise, and slow down so we arrive softly
+      const vmax = Math.min(SPEED * H, Math.sqrt(2 * ACCEL * H * left) + 20);
+      v = Math.min(vmax, v + ACCEL * H * dt);
+      cur += dir * Math.min(left, v * dt);
       setByUs = Math.round(cur);
       scrollTo(0, cur);
       requestAnimationFrame(run);
     }
-    function push(dy) {
-      if (!active) { cur = scrollY; target = scrollY; }
-      // Never let the queued distance run more than ~1.2 screens ahead, so stopping feels responsive.
-      target = clampY(Math.max(cur - innerHeight * 1.2, Math.min(cur + innerHeight * 1.2, target + dy)));
-      if (!active) { active = true; requestAnimationFrame(run); }
+    function play(d) {
+      if (running && d === dir) return;            // already playing this way: keep the steady pace
+      if (!running) cur = scrollY;
+      if (running && d !== dir) v = 0;             // turning round
+      dir = d; goal = nextStop(cur, d);
+      if (Math.abs(goal - cur) < 1) { stop(); return; }
+      if (!running) { running = true; lastT = 0; requestAnimationFrame(run); }
     }
+    let lastWheel = 0;
     addEventListener('wheel', (e) => {
       if (e.ctrlKey || e.defaultPrevented) return; // pinch-zoom
-      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
       e.preventDefault();
-      push(e.deltaY * unit * WHEEL);
+      const now = performance.now(), d = Math.sign(e.deltaY);
+      if (!d) return;
+      // a trackpad keeps sending small steps after a flick; only a fresh gesture or a clear reverse counts
+      const quiet = now - lastWheel; lastWheel = now;
+      if (running && d === dir) return;
+      if (running && Math.abs(e.deltaY) < 6) return;   // momentum wobble, not a real reverse
+      if (!running && quiet < 250) return;   // momentum still running out after a stop: wait for a new gesture
+      play(d);
     }, { passive: false });
-    // Touch: follow the finger 1:1 for control, then a gentle, capped glide instead of a long native fling.
-    let ty = null, vy = 0, lastMoveT = 0;
-    addEventListener('touchstart', (e) => { if (e.touches.length !== 1) return; ty = e.touches[0].clientY; vy = 0; lastMoveT = performance.now(); active = false; target = cur = scrollY; }, { passive: true });
+    // Touch: a swipe starts the glide; a tap while it plays stops it.
+    let ty = null, startY = 0, moved = false;
+    addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      ty = startY = e.touches[0].clientY; moved = false;
+      if (running) { stop(); moved = true; }
+    }, { passive: true });
     addEventListener('touchmove', (e) => {
       if (ty == null || e.touches.length !== 1) return;
-      const y = e.touches[0].clientY, now = performance.now();
-      const dy = ty - y; ty = y;
-      vy = dy / Math.max(1, now - lastMoveT); lastMoveT = now;
       e.preventDefault();
-      cur = target = clampY(scrollY + dy); setByUs = Math.round(cur); scrollTo(0, cur);
+      const y = e.touches[0].clientY;
+      if (Math.abs(y - startY) > 12) moved = true;
+      ty = y;
     }, { passive: false });
-    addEventListener('touchend', () => { if (ty == null) return; ty = null; push(Math.max(-1, Math.min(1, vy)) * innerHeight * 0.45); }, { passive: true });
-    // Native scrolls we didn't make (keyboard, scrollbar, links): stop our glide and follow them.
-    addEventListener('scroll', () => { if (Math.abs(scrollY - setByUs) > 2 && ty == null) { active = false; cur = target = scrollY; } }, { passive: true });
-    return { push };
+    addEventListener('touchend', () => {
+      if (ty == null) return;
+      const dy = startY - ty; ty = null;
+      if (Math.abs(dy) > 24) play(Math.sign(dy));
+    }, { passive: true });
+    addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && running) stop(); });
+    addEventListener('keydown', () => { if (running) stop(); });
+    // Native scrolls we didn't make (keyboard, scrollbar, links): stop and follow them.
+    addEventListener('scroll', () => { if (running && Math.abs(scrollY - setByUs) > 2) stop(); }, { passive: true });
+    return { play, stop, stops };
   })();
+  window.__gomoCalm = calm;
 
   var lastY = null;
   window.__gomoScenes = scenes; // read-only hook for QA (scene progress)
