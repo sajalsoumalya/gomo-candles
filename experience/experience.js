@@ -509,6 +509,58 @@
     requestAnimationFrame(loop);
   }
 
+  // ------------------------------------------------------------------ calm scrolling
+  // A fast mouse-wheel / trackpad flick or a hard swipe would otherwise carry the reader past a whole scene in a second.
+  // The page's own scroll is eased and speed-limited (about 0.8 screen-heights per second), so every moment plays out.
+  // Keyboard, scrollbar dragging and links keep their native behaviour.
+  const calm = (() => {
+    if (reduced) return null;
+    const MAX_VH_PER_S = 0.8;      // top speed
+    const WHEEL = 0.55;            // fraction of each wheel step that is applied
+    let target = scrollY, cur = scrollY, active = false, setByUs = -1, lastT = 0;
+    const maxY = () => document.documentElement.scrollHeight - innerHeight;
+    const clampY = (y) => Math.max(0, Math.min(maxY(), y));
+    function run(now) {
+      const dt = Math.min(.05, (now - (lastT || now)) / 1000); lastT = now;
+      const diff = target - cur;
+      if (Math.abs(diff) < .5) { cur = target; active = false; lastT = 0; return; }
+      const cap = MAX_VH_PER_S * innerHeight * Math.max(dt, 1 / 120);
+      let step = diff * (1 - Math.exp(-dt * 7));
+      if (Math.abs(step) > cap) step = Math.sign(step) * cap;
+      cur += step;
+      setByUs = Math.round(cur);
+      scrollTo(0, cur);
+      requestAnimationFrame(run);
+    }
+    function push(dy) {
+      if (!active) { cur = scrollY; target = scrollY; }
+      // Never let the queued distance run more than ~1.2 screens ahead, so stopping feels responsive.
+      target = clampY(Math.max(cur - innerHeight * 1.2, Math.min(cur + innerHeight * 1.2, target + dy)));
+      if (!active) { active = true; requestAnimationFrame(run); }
+    }
+    addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.defaultPrevented) return; // pinch-zoom
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1;
+      e.preventDefault();
+      push(e.deltaY * unit * WHEEL);
+    }, { passive: false });
+    // Touch: follow the finger 1:1 for control, then a gentle, capped glide instead of a long native fling.
+    let ty = null, vy = 0, lastMoveT = 0;
+    addEventListener('touchstart', (e) => { if (e.touches.length !== 1) return; ty = e.touches[0].clientY; vy = 0; lastMoveT = performance.now(); active = false; target = cur = scrollY; }, { passive: true });
+    addEventListener('touchmove', (e) => {
+      if (ty == null || e.touches.length !== 1) return;
+      const y = e.touches[0].clientY, now = performance.now();
+      const dy = ty - y; ty = y;
+      vy = dy / Math.max(1, now - lastMoveT); lastMoveT = now;
+      e.preventDefault();
+      cur = target = clampY(scrollY + dy); setByUs = Math.round(cur); scrollTo(0, cur);
+    }, { passive: false });
+    addEventListener('touchend', () => { if (ty == null) return; ty = null; push(Math.max(-1, Math.min(1, vy)) * innerHeight * 0.45); }, { passive: true });
+    // Native scrolls we didn't make (keyboard, scrollbar, links): stop our glide and follow them.
+    addEventListener('scroll', () => { if (Math.abs(scrollY - setByUs) > 2 && ty == null) { active = false; cur = target = scrollY; } }, { passive: true });
+    return { push };
+  })();
+
   var lastY = null;
   window.__gomoScenes = scenes; // read-only hook for QA (scene progress)
   sizeFrames();
