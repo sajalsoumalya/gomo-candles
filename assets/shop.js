@@ -48,8 +48,8 @@
     var by = {};
     products.forEach(function (p) { by[p.id] = p; });
     function offer(id, type, name, description, badge, price, items) {
-      var full = items.map(function (it) { return { product_id: it[0], qty: it[1], name: by[it[0]].name, art: by[it[0]].art, unit_price: by[it[0]].price }; });
-      var compare = full.reduce(function (s, it) { return s + it.unit_price * it.qty; }, 0);
+      var full = items.map(function (it) { return { product_id: it[0], qty: it[1], name: by[it[0]].name, art: by[it[0]].art, unit_price: by[it[0]].price, unit_mrp: Math.max(by[it[0]].mrp || 0, by[it[0]].price || 0) }; });
+      var compare = full.reduce(function (s, it) { var p = by[it.product_id]; return s + Math.max(p.mrp || 0, p.price || 0) * it.qty; }, 0);
       return { id: id, type: type, name: name, description: description, badge: badge, price: price, compare_at: compare,
         savings: Math.max(0, compare - price), contents: full.map(function (i) { return i.qty + ' × ' + i.name; }).join(', '), items: full, in_stock: true };
     }
@@ -206,6 +206,8 @@
   function useSvg(href, cls) { return '<svg' + (cls ? ' class="' + cls + '"' : '') + ' aria-hidden="true"><use href="' + href + '"/></svg>'; }
   function productArt(p) { return hasPhoto(p) ? photoImg(p.images[0], { cls: 'thumb-photo', alt: p.name, square: true, tiny: true }) : useSvg(ART[p.art] || ART.candle); }
   function offerArt(o, small) {
+    // The offer's own photos (Admin → Offers) come first.
+    if (o.images && o.images.length && o.images[0].web) return '<div class="offer-photo own">' + photoImg(o.images[0], { cls: 'photo', alt: o.name, square: !!small, tiny: small }) + '</div>';
     if (o.type !== 'pack' && isTrio(o)) {
       return small
         ? '<img class="thumb-photo cutout" src="' + COMBO_IMG.sq_small + '" width="160" height="160" alt="" loading="lazy">'
@@ -356,7 +358,7 @@
         countdownHtml(o) +
         '<ul>' + o.items.map(function (it) {
           var p = prodById[it.product_id];
-          return '<li><div>' + esc(it.qty) + ' × ' + (p ? '<a href="' + esc(productUrl(p)) + '">' + esc(it.name) + '</a>' : esc(it.name)) + '</div><span>' + inr(it.unit_price * it.qty) + '</span></li>';
+          return '<li><div>' + esc(it.qty) + ' × ' + (p ? '<a href="' + esc(productUrl(p)) + '">' + esc(it.name) + '</a>' : esc(it.name)) + '</div><span>' + inr((it.unit_mrp || it.unit_price) * it.qty) + '</span></li>';
         }).join('') + '</ul>' +
         '<div class="combo-price"><b>' + inr(o.price) + '</b>' + (o.savings ? '<s>' + inr(o.compare_at) + '</s><em>You save ' + inr(o.savings) + '</em>' : '') + '</div>' +
         (o.in_stock === false
@@ -572,7 +574,7 @@
       (thumbs ? '<div class="pdp-thumbs offer-thumbs">' + thumbs + '</div>' : '');
 
     var price = '<div class="pdp-price"><b>' + inr(o.price) + '</b>' + (o.savings ? '<s>' + inr(o.compare_at) + '</s><em>Save ' + inr(o.savings) + '</em>' : '') + '</div>' +
-      '<p class="pdp-tax">Inclusive of all taxes' + (o.savings ? ' · ' + inr(o.compare_at) + ' if bought separately' : '') + '</p>';
+      '<p class="pdp-tax">Inclusive of all taxes' + (o.savings ? ' · MRP ' + inr(o.compare_at) : '') + '</p>';
     var actions = '<div class="pdp-actions' + (o.in_stock === false ? ' one' : '') + '">' + (o.in_stock === false
       ? '<button type="button" class="btn btn-rust" disabled>Currently unavailable</button>'
       : '<button type="button" class="btn btn-rust" data-add="offer:' + esc(o.id) + '">Add to cart ' + ARROW + '</button><button type="button" class="btn btn-line" data-buynow="offer:' + esc(o.id) + '">Buy now</button>') + '</div>';
@@ -583,12 +585,12 @@
       return '<li>' + (p ? '<a class="oi-thumb" href="' + esc(productUrl(p)) + '" tabindex="-1" aria-hidden="true">' + productArt(p) + '</a>' : '') +
         '<div><b>' + (p ? '<a href="' + esc(productUrl(p)) + '">' + name + '</a>' : name) + '</b>' +
         (p ? '<small>' + esc(p.category) + (p.mrp > 0 ? ' \u00b7 MRP ' + inr(p.mrp) : '') + '</small>' : '') + '</div>' +
-        '<span>' + inr(it.unit_price * it.qty) + '</span></li>';
+        '<span>' + inr((it.unit_mrp || it.unit_price) * it.qty) + '</span></li>';
     }).join('') + '</ul></div>';
 
     var rows = [['Contents', o.contents || o.items.map(function (it) { return it.qty + ' \u00d7 ' + it.name; }).join(' + ')]];
     if (mrp > 0) rows.push(['Total MRP', inr(mrp)]);
-    if (o.savings) rows.push(['Bought separately', inr(o.compare_at)]);
+    if (o.savings) rows.push(['Total MRP', inr(o.compare_at)]);
     rows.push([offerKind(o) + ' price', inr(o.price) + ' (incl. of all taxes)']);
     if (o.savings) rows.push(['You save', inr(o.savings)]);
     // details every item shares (e.g. GST) are shown once for the whole offer
@@ -725,7 +727,7 @@
       '<a href="/shop" class="btn btn-line packs-more">See all products ' + ARROW + '</a>';
 
     var note = $('.offer-note');
-    if (note) note.textContent = 'Savings shown against buying the same items individually · Cash on Delivery available';
+    if (note) note.textContent = 'Savings shown against MRP · Cash on Delivery available';
   }
 
   function renderOfferBar() {

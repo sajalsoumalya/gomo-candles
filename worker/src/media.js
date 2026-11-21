@@ -66,9 +66,11 @@ export async function adminCreateMedia(request, env) {
   requireStorage(env);
   const body = await readJson(request);
   const d = db(env);
+  // Owner: a product id, or "offer-<offerId>" for photos of an offer (combo / pack).
   const productId = String(body.product_id || '');
-  if (!/^[a-z0-9-]{1,64}$/.test(productId) || !(await d.get(`products/${productId}/id`))) {
-    throw new HttpError(422, 'Save the product first, then add photos.', { code: 'product_required' });
+  const ownerPath = productId.startsWith('offer-') ? `offers/${productId.slice(6)}/id` : `products/${productId}/id`;
+  if (!/^[a-z0-9-]{1,70}$/.test(productId) || !(await d.get(ownerPath))) {
+    throw new HttpError(422, 'Save it first, then add photos.', { code: 'product_required' });
   }
   const sha256 = /^[0-9a-f]{64}$/.test(body.sha256 || '') ? body.sha256 : null;
   const existing = values(await d.get('media', { orderBy: 'product_id', equalTo: productId }))
@@ -200,7 +202,7 @@ export async function adminDeleteMedia(env, id) {
 
 export async function adminListMedia(request, env) {
   const productId = new URL(request.url).searchParams.get('product_id') || '';
-  if (!/^[a-z0-9-]{1,64}$/.test(productId)) throw new HttpError(422, 'product_id is required.');
+  if (!/^[a-z0-9-]{1,70}$/.test(productId)) throw new HttpError(422, 'product_id is required.');
   const rows = values(await db(env).get('media', { orderBy: 'product_id', equalTo: productId }))
     .filter((m) => m.status === 'uploading' || m.status === 'uploaded')
     .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));

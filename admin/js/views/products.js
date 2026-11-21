@@ -61,7 +61,7 @@ function card(p) {
  *   { key, id, alt, thumb (storage key) | preview (blob URL), w, h, color, state: saved|uploading|uploaded|interrupted|error,
  *     isNew, progress, label, error, ctrl, prep, media, file }
  */
-function photosEditor(product, host) {
+export function photosEditor(product, host) {
   const items = (product.images || []).map((im) => ({ key: im.id, id: im.id, alt: im.alt || '', thumb: im.thumb, color: im.color, state: 'saved', isNew: false }));
   const initialIds = items.map((i) => i.id).join(',');
   let dragKey = null;

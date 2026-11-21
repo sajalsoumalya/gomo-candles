@@ -24,6 +24,7 @@ const toProduct = (r) => ({
 const toOffer = (r) => ({
   id: r.id, type: r.type, name: r.name, description: r.description || '', badge: r.badge || '', price: Number(r.price) || 0,
   published: !!r.published, starts_at: r.starts_at || null, ends_at: r.ends_at || null, countdown: r.countdown !== false, sort: Number(r.sort) || 0,
+  images: toImages(r.images),
   created_at: r.created_at || null, updated_at: r.updated_at || null,
   items: values(r.items).map((i) => ({ product_id: i.product_id, qty: Number(i.qty) })),
 });
@@ -55,6 +56,7 @@ export function decorateOffer(offer, productsById, now = Date.now()) {
       art: productsById[it.product_id]?.art || 'candle',
       image: productsById[it.product_id]?.images?.[0] || null,
       unit_price: productsById[it.product_id]?.price || 0,
+      unit_mrp: Math.max(productsById[it.product_id]?.mrp || 0, productsById[it.product_id]?.price || 0),
     })),
   };
 }
@@ -167,14 +169,19 @@ export async function adminListOffers(env) {
   return json({ offers: cat.offers.map((o) => decorateOffer(o, cat.productsById)), products: cat.products });
 }
 
-async function writeOffer(env, id, v, existing) {
+async function writeOffer(env, id, v, existing, imagesIn) {
   const now = nowIso();
+  // Offer photos (optional): same uploader/storage as products, owner key "offer-<id>".
+  let plan = null;
+  if (imagesIn !== undefined) plan = await planProductImages(env, `offer-${id}`, existing?.images, imagesIn);
   const row = {
     id, type: v.type, name: v.name, description: v.description, badge: v.badge, price: v.price, published: !!v.published,
     starts_at: v.starts_at, ends_at: v.ends_at, countdown: v.countdown !== false, sort: v.sort, items: v.items,
+    images: plan ? plan.images : (existing?.images || null),
     created_at: existing?.created_at || now, updated_at: now,
   };
   await db(env).put(`offers/${id}`, row);
+  if (plan) await applyMediaChanges(env, plan);
   const cat = await loadCatalog(env);
   return decorateOffer(toOffer(row), cat.productsById);
 }
@@ -193,7 +200,7 @@ export async function adminUpdateOffer(env, id, body) {
   const existing = await db(env).get(`offers/${id}`);
   if (!existing) throw new HttpError(404, 'Offer not found.');
   const v = validateOfferInput(body, await productIds(env));
-  return json({ offer: await writeOffer(env, id, v, existing) });
+  return json({ offer: await writeOffer(env, id, v, existing, Object.prototype.hasOwnProperty.call(body, 'images') ? body.images : undefined) });
 }
 
 export async function adminPublishOffer(env, id, published) {
@@ -205,7 +212,12 @@ export async function adminPublishOffer(env, id, published) {
 
 export async function adminDeleteOffer(env, id) {
   const d = db(env);
-  if (!(await d.get(`offers/${id}/id`))) throw new HttpError(404, 'Offer not found.');
+  const cur = await d.get(`offers/${id}`);
+  if (!cur) throw new HttpError(404, 'Offer not found.');
   await d.remove(`offers/${id}`);
+  // Delete its photos from storage too (cleanup job removes the files).
+  const pending = values(await d.get('media', { orderBy: 'product_id', equalTo: `offer-${id}` })).filter((m) => m.status !== 'trash').map((m) => m.id);
+  const ids = [...new Set([...values(cur.images).map((i) => i?.id).filter(Boolean), ...pending])];
+  if (ids.length) await applyMediaChanges(env, { trash: ids });
   return json({ ok: true });
 }

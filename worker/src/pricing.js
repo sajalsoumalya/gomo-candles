@@ -10,8 +10,12 @@ export function isOfferLive(offer, now = Date.now()) {
   return true;
 }
 
+/** What the offer's items are worth at MRP (falls back to the selling price for items with no MRP). Savings = this − offer price. */
 export function offerCompareAt(offer, productsById) {
-  return (offer.items || []).reduce((sum, it) => sum + (productsById[it.product_id]?.price || 0) * it.qty, 0);
+  return (offer.items || []).reduce((sum, it) => {
+    const p = productsById[it.product_id];
+    return sum + Math.max(p?.mrp || 0, p?.price || 0) * it.qty;
+  }, 0);
 }
 
 export function offerContents(offer, productsById) {

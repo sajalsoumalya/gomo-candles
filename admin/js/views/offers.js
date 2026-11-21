@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { photosEditor } from './products.js';
 import { esc, inr, artSvg, loading, icon, toast, busy, showFieldErrors, confirmDialog, toLocalInput, fromLocalInput, fmtDate, fmtIst } from '../ui.js';
 
 export async function render(el, ctx) {
@@ -107,7 +108,8 @@ function editor(el, ctx, d) {
     nameTouched: !!existing,
   };
 
-  const compare = () => st.items.reduce((s, i) => s + (byId[i.product_id]?.price || 0) * (Number(i.qty) || 0), 0);
+  const mrpOf = (id) => Math.max(byId[id]?.mrp || 0, byId[id]?.price || 0);
+  const compare = () => st.items.reduce((s, i) => s + mrpOf(i.product_id) * (Number(i.qty) || 0), 0);
   const autoName = () => {
     if (st.nameTouched) return;
     if (st.type === 'pack') {
@@ -148,7 +150,7 @@ function editor(el, ctx, d) {
           </section>` : ''}
 
           <section class="pe-sec">
-            <div class="pe-h"><h4>${st.type === 'pack' ? 'Product &amp; quantity' : 'Products in this combo'}</h4><span>Worth ${inr(cmp)} if bought separately</span></div>
+            <div class="pe-h"><h4>${st.type === 'pack' ? 'Product &amp; quantity' : 'Products in this combo'}</h4><span>Total MRP ${inr(cmp)}</span></div>
             <div class="field" data-field="items">
               <div class="item-rows">${st.items.map((it, i) => `<div class="item-row">
                 <span class="ir-n">${i + 1}</span>
@@ -162,10 +164,16 @@ function editor(el, ctx, d) {
           </section>
 
           <section class="pe-sec">
+            <div class="pe-h"><h4>Photos <i style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</i></h4><span>Shown on the combo banner and its page</span></div>
+            ${isNew ? '<div class="alert info" style="margin:0">Create the offer first — then you can add its own photos. Until then the product photos are used.</div>'
+              : '<div class="field" data-field="images"><div id="offerPhotos"></div><div class="err"></div></div><p class="hint" style="margin:0;font-size:.78rem">No photos? The shop shows the products’ photos together instead.</p>'}
+          </section>
+
+          <section class="pe-sec">
             <div class="pe-h"><h4>Price &amp; name</h4><span>Price includes GST</span></div>
             <div class="form-row">
               <div class="field" data-field="price"><label for="op">Offer price</label><div class="pe-money"><span>₹</span><input id="op" type="number" min="1" step="1" value="${esc(st.price)}" inputmode="numeric" placeholder="${cmp ? Math.round(cmp * 0.87) : ''}"></div>
-                ${price ? `<div class="hint ${save > 0 ? 'ok-txt' : 'err-txt'}">${save > 0 ? `Customer saves ${inr(save)} (${Math.round((save / cmp) * 100)}%)` : 'Higher than buying separately'}</div>` : '<div class="hint">Lower than the worth above.</div>'}</div>
+                ${price ? `<div class="hint ${save > 0 ? 'ok-txt' : 'err-txt'}">${save > 0 ? `Customer saves ${inr(save)} (${Math.round((save / cmp) * 100)}%)` : 'Higher than the total MRP'}</div>` : '<div class="hint">Lower than the worth above.</div>'}</div>
               <div class="field" data-field="badge"><label for="ob">Badge</label><input id="ob" value="${esc(st.badge)}" maxlength="30" placeholder="Combo of 3"></div>
             </div>
             <div class="field" data-field="name"><label for="on">Offer name</label><input id="on" value="${esc(st.name)}" maxlength="100" placeholder="${st.type === 'pack' ? 'Evil Eye Candle — Pack of 3' : 'The Complete GoMo Ritual'}"></div>
@@ -199,8 +207,8 @@ function editor(el, ctx, d) {
         <div class="grid" style="align-content:start">
           <div class="card"><h3>Price check</h3>
             <div class="price-preview">
-              ${st.items.map((i) => `<div><span>${esc(i.qty)} × ${esc(byId[i.product_id]?.name || '—')}</span><span>${inr((byId[i.product_id]?.price || 0) * (Number(i.qty) || 0))}</span></div>`).join('')}
-              <div style="border-top:1px dashed var(--line);padding-top:6px;margin-top:4px"><span>Worth</span><b>${inr(cmp)}</b></div>
+              ${st.items.map((i) => `<div><span>${esc(i.qty)} × ${esc(byId[i.product_id]?.name || '—')} <small class="muted">MRP</small></span><span>${inr(mrpOf(i.product_id) * (Number(i.qty) || 0))}</span></div>`).join('')}
+              <div style="border-top:1px dashed var(--line);padding-top:6px;margin-top:4px"><span>Total MRP</span><b>${inr(cmp)}</b></div>
               <div><span>Offer price</span><b>${price ? inr(price) : '—'}</b></div>
               ${price ? `<div class="${save > 0 ? 'save' : 'loss'}"><span>${save > 0 ? 'Customer saves' : 'No saving'}</span><span>${save > 0 ? inr(save) + ` (${Math.round((save / cmp) * 100)}%)` : inr(save)}</span></div>` : ''}
             </div>
@@ -217,7 +225,13 @@ function editor(el, ctx, d) {
     bind();
   };
 
+  let photos = null;
   const bind = () => {
+    const host = el.querySelector('#offerPhotos');
+    if (host && existing) {
+      if (!photos) { photos = photosEditor({ id: `offer-${existing.id}`, images: existing.images || [] }, host); bind.host = host; }
+      else if (bind.host !== host) { host.replaceWith(bind.host); } // keep uploads in progress across redraws
+    }
     const f = el.querySelector('#of');
     el.querySelectorAll('[data-type]').forEach((b) => b.addEventListener('click', () => {
       syncFromDom();
@@ -247,12 +261,14 @@ function editor(el, ctx, d) {
       e.preventDefault();
       syncFromDom();
       const btn = f.querySelector('#osave');
+      if (photos?.busy()) return toast('Please wait for the photos to finish uploading.', 'err');
       busy(btn, true);
       const body = {
         type: st.type, name: st.name, badge: st.badge, description: st.description, price: Number(st.price),
         published: st.published, starts_at: st.starts_at, ends_at: st.ends_at, countdown: st.countdown, sort: Number(st.sort || 0),
         items: st.items.map((i) => ({ product_id: i.product_id, qty: Number(i.qty) })),
       };
+      if (photos) body.images = photos.payload();
       try {
         await api(isNew ? '/api/admin/offers' : `/api/admin/offers/${existing.id}`, { method: isNew ? 'POST' : 'PUT', body });
         toast(st.published ? 'Saved and published' : 'Saved as draft', 'ok');
