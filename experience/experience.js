@@ -436,11 +436,15 @@
       const wasVisible = s.visible;
       s.visible = r.top < vh && r.bottom > 0;
       s.target = clamp(-r.top / (r.height - vh));
-      if (s.visible && !wasVisible) { s.p = s.target; s.apply(s); } // no long catch-up when jumping in
+      // Entering from above: start at the beginning and play forward (capped), so a fast flick doesn't skip the scene.
+      // Jumping in from far away (e.g. reload mid-page) or from below: show the current point straight away.
+      // lastY tells us the direction: coming down from above the scene → play from its start.
+      if (s.visible && !wasVisible) { s.p = (lastY < s.el.offsetTop && lastY !== null) ? 0 : s.target; s.apply(s); }
       setCopies(s);
       if (s.visible) inScene = true;
       s.el.querySelector('.stage').style.setProperty('--fade', (1 - clamp(Math.min(s.target * 16, (1 - s.target) * 10))).toFixed(3));
     });
+    lastY = scrollY;
     // the story spans an evening: 6:30 PM at the wardrobe → 11:00 PM by the pillow
     if (clockEl) {
       const first = scenes[0].el.offsetTop, lastS = scenes[scenes.length - 1].el;
@@ -483,10 +487,18 @@
     const dt = Math.min(.05, (now - last) / 1000); last = now;
     const t = now / 1000;
     par.x += (par.tx - par.x) * (1 - Math.exp(-dt * 3)); par.y += (par.ty - par.y) * (1 - Math.exp(-dt * 3));
-    const k = 1 - Math.exp(-dt * 6); // inertia: progress glides toward the scroll position
+    const k = 1 - Math.exp(-dt * 3.2); // inertia: progress glides toward the scroll position (lower = calmer)
+    // Speed limit: however fast someone scrolls, a scene plays at most MAX_RATE of its length per second, so each
+    // moment (and its words) stays on screen long enough to take in. It catches up smoothly when scrolling slows.
+    const MAX_RATE = 0.16;
     scenes.forEach(s => {
       if (!s.visible) { if (s.particles.length) s.particles.length = 0; return; }
-      if (!pin && Math.abs(s.target - s.p) > 1e-4) { s.p += (s.target - s.p) * k; s.apply(s); setCopies(s); }
+      if (!pin && Math.abs(s.target - s.p) > 1e-4) {
+        let step = (s.target - s.p) * k;
+        const cap = MAX_RATE * dt;
+        if (step > cap) step = cap; else if (step < -cap * 2) step = -cap * 2; // rewinding may be a bit quicker
+        s.p += step; s.apply(s); setCopies(s);
+      }
       s.tick && s.tick(s, dt, t);
       if (s.live) {
         const k = s.type === 'wardrobe' ? [s.gust || 0, 0] : s.type === 'candle' ? [s.light || 0, ((s.flick || .9) - .9) * 4] : [s.kick || 0, s.wet || 0];
@@ -497,6 +509,8 @@
     requestAnimationFrame(loop);
   }
 
+  var lastY = null;
+  window.__gomoScenes = scenes; // read-only hook for QA (scene progress)
   sizeFrames();
   addEventListener('resize', () => { sizeFrames(); onScroll(); });
   addEventListener('scroll', onScroll, { passive: true });

@@ -38,7 +38,7 @@ h1 em,h2 em{font-size:1.12em}
 @keyframes cue{0%{opacity:0;transform:translateY(0)}30%{opacity:1}100%{opacity:0;transform:translateY(14px)}}
 
 /* Scenes: tall section + sticky stage; JS writes --p (0..1) */
-.scene{position:relative;height:420vh}
+.scene{position:relative;height:640vh}
 .stage{position:sticky;top:0;height:100vh;overflow:hidden;background:#1a120c}
 .frame{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(var(--zoom,1));transform-origin:center;will-change:transform}
 .frame .photo{width:100%;height:100%;object-fit:cover;will-change:filter,transform}
