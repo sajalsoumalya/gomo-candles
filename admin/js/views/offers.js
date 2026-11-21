@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { photosEditor } from './products.js';
+import { mediaUrl } from '../upload.js';
 import { esc, inr, artSvg, loading, icon, toast, busy, showFieldErrors, confirmDialog, toLocalInput, fromLocalInput, fmtDate, fmtIst } from '../ui.js';
 
 export async function render(el, ctx) {
@@ -18,13 +19,25 @@ function offerState(o) {
   return ['live', o.ends_at ? `Live · ends ${fmtIst(o.ends_at)}` : 'Live'];
 }
 
+// Same order as the shop: the offer's own photo, then its products' main photos, then the drawn icons.
+let photoById = {};
+const thumbOf = (img) => (img && (img.thumb || img.web)) ? mediaUrl(img.thumb || img.web) : '';
 function offerArt(o) {
+  const own = thumbOf(o.images?.[0]);
+  if (own) return `<img src="${esc(own)}" alt="" loading="lazy" style="background:${esc(o.images[0].color || '#eee')}">`;
+  const pics = o.items.map((i) => thumbOf(photoById[i.product_id] || i.image));
+  if (pics.length && pics.every(Boolean)) {
+    const show = o.type === 'pack' ? [pics[0]] : pics.slice(0, 3);
+    return `<span class="offer-pics n${show.length}">${show.map((src) => `<img src="${esc(src)}" alt="" loading="lazy">`).join('')}</span>${o.type === 'pack' ? `<span class="photo-n">×${esc(o.items[0]?.qty)}</span>` : ''}`;
+  }
   const arts = o.items.map((i) => i.art);
   if (o.type === 'pack') return `<span style="display:flex">${artSvg(arts[0])}${artSvg(arts[0])}</span>`;
   return `<span style="display:flex">${arts.slice(0, 3).map(artSvg).join('')}</span>`;
 }
+const hasPics = (o) => /<img/.test(offerArt(o));
 
 function list(el, d) {
+  photoById = Object.fromEntries((d.products || []).map((p) => [p.id, p.images?.[0]]));
   const combos = d.offers.filter((o) => o.type === 'combo');
   const packs = d.offers.filter((o) => o.type === 'pack');
   const section = (title, items, type) => `
@@ -65,7 +78,7 @@ function list(el, d) {
 function card(o) {
   const [cls, label] = offerState(o);
   return `<div class="p-card">
-    <div class="vis"><span class="pill ${cls}">${esc(label)}</span>${offerArt(o)}</div>
+    <div class="vis${hasPics(o) ? ' has-photo' : ''}"><span class="pill ${cls}">${esc(label)}</span>${offerArt(o)}</div>
     <div class="body">
       <small>${esc(o.badge || (o.type === 'pack' ? 'Pack' : 'Combo'))}</small>
       <b>${esc(o.name)}</b>

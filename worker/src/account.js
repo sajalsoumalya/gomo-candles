@@ -577,6 +577,53 @@ export async function myOrders(request, env) {
     items: values(o.items).map((i) => ({ name: i.name, qty: i.qty })),
     courier: o.courier || null, tracking_no: o.tracking_no || null, tracking_url: o.tracking_url || null,
     city: o.city, pincode: o.pincode,
+    can_cancel: ['placed', 'confirmed', 'packed'].includes(o.status),
   }));
   return json({ orders });
+}
+
+// --------------------------------------------------------------------------- privacy (DPDP Act): export and delete
+
+/** GET /api/account/export: everything we hold about the signed-in customer, as a JSON download. */
+export async function exportMyData(request, env, who = null) {
+  const { uid, profile } = who || await requireCustomer(request, env);
+  const d = db(env);
+  const idx = (await d.get(`user_orders/${uid}`)) || {};
+  const orders = (await Promise.all(Object.keys(idx).slice(0, 500).map((no) => d.get(`orders/${no}`)))).filter(Boolean)
+    .map(({ events, idempotency_key, razorpay_order_id, stock_held, stock_released, ...o }) => ({ ...o, items: values(o.items) }));
+  const { addresses, ...rest } = profile || {};
+  const data = { exported_at: nowIso(), account: rest, addresses: values(addresses), orders };
+  return new Response(JSON.stringify(data, null, 2), {
+    headers: { 'content-type': 'application/json; charset=utf-8', 'content-disposition': 'attachment; filename="gomo-my-data.json"', 'cache-control': 'no-store' },
+  });
+}
+
+const OPEN_STATUSES = ['placed', 'confirmed', 'packed', 'shipped', 'out_for_delivery'];
+
+/**
+ * POST /api/account/delete { confirm: "DELETE" }: erase the customer's account.
+ * Orders are kept (tax law requires invoices for 8 years) but unlinked from the account.
+ * Refused while an order is still on its way, so delivery and refunds can finish.
+ */
+export async function deleteMyAccount(request, env, who = null) {
+  const { uid, profile } = who || await requireCustomer(request, env);
+  const body = await readJson(request).catch(() => ({}));
+  if (body.confirm !== 'DELETE') throw new HttpError(400, 'Please confirm account deletion.');
+  if (!(await rateLimit(env, `acctdel:${uid}`, 5, 3600))) throw new HttpError(429, 'Too many attempts. Please try again later.');
+  const d = db(env);
+  const idx = (await d.get(`user_orders/${uid}`)) || {};
+  const orders = (await Promise.all(Object.keys(idx).map((no) => d.get(`orders/${no}/status`))));
+  if (orders.some((st) => OPEN_STATUSES.includes(st))) {
+    throw new HttpError(409, 'You have an order that is still on its way. You can delete your account once it is delivered or cancelled.', { code: 'open_orders' });
+  }
+  const updates = {
+    [userPath(uid)]: { uid, deleted_at: nowIso(), disabled: true },
+    [`user_orders/${uid}`]: null,
+  };
+  if (profile?.phone && (await d.get(`user_index/phone/${profile.phone}`)) === uid) updates[`user_index/phone/${profile.phone}`] = null;
+  if (profile?.email && (await d.get(`user_index/email/${safeKey(profile.email)}`)) === uid) updates[`user_index/email/${safeKey(profile.email)}`] = null;
+  await d.patch('', updates);
+  await d.patch(`audit/${pushKey()}`, { at: nowIso(), uid, action: 'account_deleted' }).catch(() => {});
+  try { await authAdmin(env).remove(uid); } catch (e) { console.error('auth delete failed', e?.message || e); }
+  return json({ ok: true });
 }

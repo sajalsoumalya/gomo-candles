@@ -11,6 +11,10 @@ export function render(tpl, vars) {
 }
 
 export function paymentLabel(order) {
+  // Online refunds: review → initiated at Razorpay → refunded
+  if (order.payment_status === 'paid' && order.refund?.status === 'review') return 'Paid online · refund under review';
+  if (order.payment_status === 'paid' && order.refund?.status === 'processing') return 'Refund initiated (5–7 working days)';
+  if (order.payment_status === 'paid' && order.refund?.status === 'failed') return 'Paid online · refund being retried';
   if (order.payment_status === 'paid') return order.payment_method === 'cod' ? 'Paid (Cash on Delivery)' : 'Paid online';
   if (order.payment_status === 'refunded') return 'Refunded';
   return order.payment_method === 'cod' ? 'Cash on Delivery' : 'Online payment pending';

@@ -139,6 +139,7 @@ function bindCodeBoxes(root, onComplete) {
   setTimeout(() => boxes[0].focus({ preventScroll: true }), 50);
 }
 
+const SPAM_TIP = '<span class="spam-tip">Not in your inbox? Check your Spam or Promotions folder.</span>';
 const channelText = (c) => (c === 'whatsapp' ? 'on WhatsApp' : c === 'sms' ? 'by SMS' : c === 'email' ? 'by email' : '(test mode)');
 const normPhone = (v) => {
   let d = String(v || '').replace(/\D/g, '');
@@ -283,7 +284,7 @@ function renderAuth() {
       ${s.dev_code ? `<p class="dev-code">Test mode code: <b>${esc(s.dev_code)}</b></p>` : ''}
       <form id="amCode" novalidate>${codeBoxes('amBoxes', am.code, am.busy)}
         <button type="submit" class="btn btn-rust btn-block"${am.busy ? ' disabled' : ''}>${am.busy ? '<span class="spinner"></span> Checking…' : 'Verify'}</button></form>
-      <div class="auth-links"><button type="button" class="link-btn" data-a="resend" id="amResend">Resend code</button>
+      <div class="auth-links">${s.email || s.channel === 'email' ? SPAM_TIP : ''}<button type="button" class="link-btn" data-a="resend" id="amResend">Resend code</button>
         ${smsOk && !s.email && s.channel !== 'sms' ? '<button type="button" class="link-btn" data-a="sms" id="amSms">Send by SMS instead</button>' : ''}</div>`;
   } else if (am.view === 'verify_phone') {
     body = `<form class="form" id="amVerifyPhone" novalidate>
@@ -584,6 +585,7 @@ function verifyPanel(kind) {
     <p class="auth-sent">Code sent ${channelText(v.sent?.channel)} to <b>${esc(v.sent?.masked || '')}</b></p>
     ${v.sent?.dev_code ? `<p class="dev-code">Test mode code: <b>${esc(v.sent.dev_code)}</b></p>` : ''}
     ${codeBoxes(`vb-${kind}`, v.code, v.busy)}
+    ${kind === 'email' || v.sent?.channel === 'email' ? `<p class="muted-note">${SPAM_TIP}</p>` : ''}
     <div class="vp-actions"><button type="button" class="link-btn" data-c="vresend" id="vResend">Resend</button>
       ${kind === 'phone' && otpChannelList().includes('sms') && v.sent?.channel !== 'sms' ? '<button type="button" class="link-btn" data-c="vsms" id="vSms">Send by SMS</button>' : ''}
       <button type="button" class="btn btn-line btn-sm" data-c="vcancel">Cancel</button>
@@ -645,7 +647,9 @@ function renderAccount() {
     : !acc.orders.length ? '<p class="muted">No orders yet. <a href="/shop" data-c="shop">Start shopping →</a></p>'
       : `<ul class="order-list">${acc.orders.map((o) => `<li><div><b>${esc(o.order_no)}</b><small>${esc(S.fmtDate(o.created_at))} · ${o.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}</small></div>
           <div class="ol-right"><span class="status-pill ${esc(o.status)}">${esc(o.status_label)}</span><b>${inr(o.total)}</b>
-          <button type="button" class="link-btn" data-c="track" data-no="${esc(o.order_no)}">Track</button></div></li>`).join('')}</ul>`;
+          ${o.status === 'cancelled' && /refund/i.test(o.payment_label || '') ? `<small class="muted">${esc(o.payment_label)}</small>` : ''}
+          <button type="button" class="link-btn" data-c="track" data-no="${esc(o.order_no)}">Track</button>
+          ${o.can_cancel ? `<button type="button" class="link-btn danger" data-c="ocancel" data-no="${esc(o.order_no)}">Cancel order</button>` : ''}</div></li>`).join('')}</ul>`;
 
   const addrs = p.addresses || [];
   const addresses = `${addrs.length ? `<ul class="addr-list">${addrs.map((a) => `<li><div><b>${esc(a.label || a.name || 'Address')}${a.default ? ' <em>Default</em>' : ''}</b>
@@ -687,6 +691,10 @@ function renderAccount() {
         <aside class="ap-side">
           <section class="ap-card"><div class="ap-card-h"><h2>${todo ? 'Confirm your details' : 'Your details'}</h2></div><ul class="checklist">${phoneItem}${waItem}${emailItem}</ul></section>
           <section class="ap-card"><div class="ap-card-h"><h2>Ways to sign in</h2></div>${methods}</section>
+          <section class="ap-card"><div class="ap-card-h"><h2>Your data</h2></div>
+            <p class="muted-note" style="text-align:left;margin:0 0 10px">See our <a href="/privacy-policy">privacy policy</a>.</p>
+            <div class="ap-privacy"><button type="button" class="link-btn" data-c="export">Download my data</button>
+            <button type="button" class="link-btn danger" data-c="delacct">Delete my account</button></div></section>
         </aside>
       </div>`;
   } else {
@@ -884,6 +892,40 @@ async function onAccountClick(e) {
   if (c === 'vwa') return startVerify('whatsapp');
   if (c === 'vemail') return startVerify('email');
   if (c === 'vcancel') { acc.verify = null; return renderAccount(); }
+  if (c === 'export') {
+    b.disabled = true;
+    try {
+      const res = await fetch(String(CFG.API_BASE || '').replace(/\/+$/, '') + '/api/account/export', { headers: { authorization: 'Bearer ' + (await getToken()) } });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not download your data.');
+      const url = URL.createObjectURL(await res.blob());
+      const a = Object.assign(document.createElement('a'), { href: url, download: 'gomo-my-data.json' });
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) { S.toast(e.message); }
+    b.disabled = false; return;
+  }
+  if (c === 'delacct') {
+    const typed = prompt('This permanently deletes your GoMo account, saved addresses and sign-in. Past orders are kept only for tax records.\n\nType DELETE to confirm.');
+    if (typed !== 'DELETE') return;
+    b.disabled = true;
+    try {
+      await S.api('/api/account/delete', { method: 'POST', body: { confirm: 'DELETE' } });
+      S.toast('Your account has been deleted.');
+      S.closeAll(); await doSignOut(true); if (onAccountPage()) location.href = '/';
+    } catch (e) { S.toast(e.message); b.disabled = false; }
+    return;
+  }
+  if (c === 'ocancel') {
+    const no = b.dataset.no, o = (acc.orders || []).find((x) => x.order_no === no);
+    const paid = o && o.payment_status === 'paid';
+    if (!confirm(`Cancel order ${no}?${paid ? '\n\nYou paid online, so we will refund you to the same account.' : ''}`)) return;
+    b.disabled = true;
+    try {
+      const r = await S.api(`/api/orders/${encodeURIComponent(no)}/cancel`, { method: 'POST', body: {} });
+      S.toast(r.refund_due ? 'Order cancelled. We\'ll review it and refund you to the same account — you\'ll see the status here.' : 'Order cancelled.');
+    } catch (e) { S.toast(e.message); }
+    try { acc.orders = (await S.api('/api/account/orders')).orders; } catch { /* keep the list */ }
+    return renderAccount();
+  }
   if (c === 'vresend') return startVerify(acc.verify.kind, 'auto');
   if (c === 'vsms') return startVerify('phone', 'sms');
   if (c === 'addemail') { acc.link = { email: '' }; return renderAccount(); }

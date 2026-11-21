@@ -32,6 +32,15 @@ export async function adminPutSettings(request, env, admin) {
   }
   const current = await getSettings(env);
   const values = validateSettingsInput(body, env, current);
+  // A custom SMS gateway receives the SMS_API_KEY secret and every sign-in code, so only the owner may point it somewhere new.
+  if (admin && !admin.areas?.includes('*') && values.sms?.provider === 'custom') {
+    const keys = ['url', 'method', 'headers', 'body', 'success_match'];
+    const pick = (c) => keys.map((k) => String(c?.[k] ?? '')).join('\u0000');
+    const cur = current.sms || {};
+    if (cur.provider !== 'custom' || pick(values.sms.custom) !== pick(cur.custom)) {
+      throw new HttpError(403, 'Only the owner can set up or change a custom SMS gateway.', { code: 'forbidden' });
+    }
+  }
   await saveSettings(env, values);
   return adminGetSettings(env);
 }

@@ -46,6 +46,10 @@ export const CHANNEL_LABELS = { whatsapp: 'WhatsApp', email: 'Email', sms: 'SMS'
 
 export const statusPill = (s) => `<span class="pill ${esc(s)}">${esc(STATUS_LABELS[s] || s)}</span>`;
 export function paymentPill(o) {
+  const rf = o.payment_status === 'paid' ? o.refund?.status : null;
+  if (rf === 'review') return '<span class="pill failed" title="The order was cancelled after an online payment. Open it and press Process refund.">Refund: awaiting review</span>';
+  if (rf === 'processing') return '<span class="pill placed" title="Razorpay is sending the money back (5–7 working days).">Refund initiated</span>';
+  if (rf === 'failed') return '<span class="pill failed">Refund failed</span>';
   if (o.payment_status === 'paid') return '<span class="pill paid">Paid</span>';
   if (o.payment_status === 'refunded') return '<span class="pill refunded">Refunded</span>';
   if (o.payment_status === 'failed') return '<span class="pill failed">Failed</span>';

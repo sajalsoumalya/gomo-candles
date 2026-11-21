@@ -232,6 +232,14 @@
     });
     return out + '</svg>';
   }
+  function offerPhotos(o) {
+    var list = [], seen = {};
+    function add(img) { if (img && img.web && !seen[img.web]) { seen[img.web] = 1; list.push(img); } }
+    (o.images || []).forEach(add);
+    o.items.forEach(function (it) { var p = prodById[it.product_id]; if (hasPhoto(p)) p.images.forEach(add); });
+    return list;
+  }
+  function ownPhoto(o) { return o && o.images && o.images.length && o.images[0].web ? o.images[0] : null; }
   function offerArtHref(o) {
     if (o.type === 'pack') return PACK_ART[o.items[0] && o.items[0].art] || PACK_ART.candle;
     return '#i-trio';
@@ -346,7 +354,7 @@
       els[i].querySelector('.cd-u b[data-u="d"]').parentNode.hidden = parts.d === 0;
     }
     // When an offer runs out, reload the catalog so the price and banner disappear (the server stops selling it at the same moment).
-    if (ended && !tickCountdowns.reloading) { tickCountdowns.reloading = true; setTimeout(function () { location.reload(); }, 4000); }
+    if (ended && !tickCountdowns.reloading && !openPanel) { tickCountdowns.reloading = true; setTimeout(function () { if (openPanel) { tickCountdowns.reloading = false; return; } location.reload(); }, 4000 + Math.floor(Math.random() * 90000)); } // spread over ~1.5 min so every open tab doesn't hit the server in the same second
   }
   setInterval(tickCountdowns, 1000);
 
@@ -391,12 +399,12 @@
     var pack = buyable(p) ? packFor(p) : null;
     if (pdp.option === 'pack' && !pack) pdp.option = 'single';
     var sel = pdp.option === 'pack' ? pack : null;
-    var imgs = hasPhoto(p) ? p.images : [];
+    var imgs = sel && ownPhoto(sel) ? offerPhotos(sel) : hasPhoto(p) ? p.images : [];
     if (pdp.img >= imgs.length) pdp.img = 0;
     var off = pctOff(p);
 
     var media = imgs.length
-      ? '<button type="button" class="pdp-main" data-gallery="' + esc(p.id) + '" data-gstart="' + pdp.img + '" aria-label="Enlarge photo of ' + esc(p.name) + '"' +
+      ? '<button type="button" class="pdp-main" data-gallery="' + esc(sel && ownPhoto(sel) ? 'offer:' + sel.id : p.id) + '" data-gstart="' + pdp.img + '" aria-label="Enlarge photo of ' + esc(p.name) + '"' +
           (imgs[pdp.img].studio && VIS_BG[p.art] ? ' style="background:' + VIS_BG[p.art] + '"' : '') + '>' +
           photoImg(imgs[pdp.img], { cls: 'photo', alt: p.name, eager: true, sizes: '(max-width:980px) 92vw, 620px' }) +
           (p.tag ? '<span class="prod-tag">' + esc(p.tag) + '</span>' : '') +
@@ -562,17 +570,27 @@
     if (!o) return notFound(view, 'that offer');
     var mrp = offerMrp(o);
     setMeta(o.name, o.description || (o.name + ': ' + (o.contents || '') + ' for ' + inr(o.price) + '.'), offerUrl(o));
-    setLd(productLd(o.name, o.description || o.contents, offerUrl(o), o.price, o.in_stock !== false, o.items.map(function (i) { return i.image && i.image.web ? absImg(i.image.web) : null; })));
+    setLd(productLd(o.name, o.description || o.contents, offerUrl(o), o.price, o.in_stock !== false, offerPhotos(o).map(function (i) { return absImg(i.web); })));
 
     var thumbs = o.items.map(function (it) {
       var p = prodById[it.product_id];
       if (!p) return '';
       return '<a href="' + esc(productUrl(p)) + '" title="' + esc(p.name) + '">' + productArt(p) + '</a>';
     }).join('');
-    var media = '<div class="pdp-main offer-main' + (o.type === 'pack' ? ' is-pack' : ' is-combo') + '">' + offerArt(o) +
-        (o.badge ? '<span class="prod-tag">' + esc(o.badge) + '</span>' : '') +
-        (mrp > o.price ? '<span class="pdp-off">' + Math.round((1 - o.price / mrp) * 100) + '% off MRP</span>' : '') + '</div>' +
-      (thumbs ? '<div class="pdp-thumbs offer-thumbs">' + thumbs + '</div>' : '');
+    var oimgs = offerPhotos(o), tags = (o.badge ? '<span class="prod-tag">' + esc(o.badge) + '</span>' : '') +
+        (mrp > o.price ? '<span class="pdp-off">' + Math.round((1 - o.price / mrp) * 100) + '% off MRP</span>' : '');
+    if (pdp.id !== 'offer:' + o.id) pdp = { id: 'offer:' + o.id, option: 'single', img: 0 };
+    if (pdp.img >= oimgs.length) pdp.img = 0;
+    var media = ownPhoto(o) || (pdp.img > 0 && oimgs.length)
+      ? '<button type="button" class="pdp-main offer-main has-own" data-gallery="offer:' + esc(o.id) + '" data-gstart="' + pdp.img + '" aria-label="Enlarge photo of ' + esc(o.name) + '">' +
+          photoImg(oimgs[pdp.img], { cls: 'photo', alt: o.name, eager: true, sizes: '(max-width:980px) 92vw, 620px' }) + tags + '</button>'
+      : '<div class="pdp-main offer-main' + (o.type === 'pack' ? ' is-pack' : ' is-combo') + '">' + offerArt(o) + tags + '</div>';
+    media += oimgs.length > 1
+      ? '<div class="pdp-thumbs">' + oimgs.map(function (img, n) {
+          return '<button type="button" data-pimg="' + n + '" class="' + (n === pdp.img ? 'on' : '') + '" aria-label="Show photo ' + (n + 1) + '" aria-pressed="' + (n === pdp.img) + '">' +
+            photoImg(img, { cls: 'photo', square: true, tiny: true, decorative: true }) + '</button>';
+        }).join('') + '</div>'
+      : (thumbs ? '<div class="pdp-thumbs offer-thumbs">' + thumbs + '</div>' : '');
 
     var price = '<div class="pdp-price"><b>' + inr(o.price) + '</b>' + (o.savings ? '<s>' + inr(o.compare_at) + '</s><em>Save ' + inr(o.savings) + '</em>' : '') + '</div>' +
       '<p class="pdp-tax">Inclusive of all taxes' + (o.savings ? ' · MRP ' + inr(o.compare_at) : '') + '</p>';
@@ -590,8 +608,8 @@
     }).join('') + '</ul></div>';
 
     var rows = [['Contents', o.contents || o.items.map(function (it) { return it.qty + ' \u00d7 ' + it.name; }).join(' + ')]];
-    if (mrp > 0) rows.push(['Total MRP', inr(mrp)]);
     if (o.savings) rows.push(['Total MRP', inr(o.compare_at)]);
+    else if (mrp > 0) rows.push(['Total MRP', inr(mrp)]);
     rows.push([offerKind(o) + ' price', inr(o.price) + ' (incl. of all taxes)']);
     if (o.savings) rows.push(['You save', inr(o.savings)]);
     // details every item shares (e.g. GST) are shown once for the whole offer
@@ -694,8 +712,10 @@
   }
 
   function shipNote() {
-    var s = catalog.shipping || {};
+    var s = catalog.shipping || {}, pre = prepaidRule();
     if (!s.fee) return 'Free shipping';
+    if (pre && !pre.prepaid_fee) return 'Free delivery on prepaid orders';
+    if (s.free_above == null) return 'Delivery ' + inr(s.fee);
     return 'Free shipping ' + (s.include_equal ? 'from ' : 'above ') + inr(s.free_above);
   }
 
@@ -769,7 +789,8 @@
       var p = prodById[el.getAttribute('data-cat')];
       if (p && buyable(p)) el.innerHTML = priceWithMrp(p);
     });
-    $$('[data-ship-note]').forEach(function (el) { el.textContent = catalog.shipping.fee ? ('on orders ' + (catalog.shipping.include_equal ? 'from ' : 'above ') + inr(catalog.shipping.free_above)) : 'on every order'; });
+    var pre = prepaidRule(), sh = catalog.shipping;
+    $$('[data-ship-note]').forEach(function (el) { el.textContent = !sh.fee ? 'on every order' : pre && !pre.prepaid_fee ? 'on prepaid orders' : sh.free_above != null ? ('on orders ' + (sh.include_equal ? 'from ' : 'above ') + inr(sh.free_above)) : 'Delivery ' + inr(sh.fee); });
     // WhatsApp-only links (footer icon, "Order via WhatsApp") stay hidden until a real number is set
     $$('[data-wa]').forEach(function (a) {
       a.hidden = !hasWhatsApp();
@@ -788,7 +809,8 @@
   function buildSeason() {
     seasonItems = [];
     combos().slice(0, 1).forEach(function (o) {
-      seasonItems.push({ art: offerArtHref(o), img: isTrio(o) ? COMBO_IMG.sq_small : null, tag: 'On Offer', name: o.badge || o.name, href: offerUrl(o),
+      var own = ownPhoto(o);
+      seasonItems.push({ art: offerArtHref(o), img: own ? mediaUrl(own.sq_small || own.sq || own.thumb || own.web) : isTrio(o) ? COMBO_IMG.sq_small : null, studio: own && own.studio, tag: 'On Offer', name: o.badge || o.name, href: offerUrl(o),
         text: esc(o.items.map(function (i) { return i.name.replace(/^Evil Eye /, ''); }).join(' + ')) + ' · <strong>' + inr(o.price) + '</strong>' + (o.savings ? ' <span class="was">' + inr(o.compare_at) + '</span>' : '') });
     });
     catalog.products.forEach(function (p) {
@@ -879,12 +901,51 @@
   // ------------------------------------------------------------------ cart
   var cart = (store(CART_KEY) || []).filter(function (i) { return i && (i.type === 'product' || i.type === 'offer') && i.id && i.qty > 0; });
 
-  function saveCart() { store(CART_KEY, cart); renderCart(); }
+  function saveCart() { normalizeCart(); store(CART_KEY, cart); renderCart(); }
+
+  // ---- automatic packs: the cart holds units per product; live packs ("Pack of 3") are applied at the best price.
+  var MAX_UNITS = 20; // the server allows 20 per line
+  function packsFor(pid) {
+    var p = prodById[pid];
+    if (!p) return [];
+    return packs().filter(function (o) {
+      var it = o.items[0];
+      return o.items.length === 1 && it && it.product_id === pid && it.qty > 1 && o.in_stock !== false && o.price < p.price * it.qty;
+    }).sort(function (a, b) { return b.items[0].qty - a.items[0].qty; });
+  }
+  function splitPacks(pid, units) {
+    var left = units, used = [];
+    packsFor(pid).forEach(function (o) { var n = o.items[0].qty, k = Math.floor(left / n); if (k) { used.push({ o: o, k: k, n: n }); left -= k * n; } });
+    return { used: used, left: left };
+  }
+  // a pack added from its own card becomes units of its product, so it combines with single units
+  function normalizeCart() {
+    var out = [];
+    cart.forEach(function (i) {
+      var o = i.type === 'offer' ? offerById[i.id] : null, it = o && o.type === 'pack' && o.items.length === 1 ? o.items[0] : null;
+      var t = it && prodById[it.product_id] && buyable(prodById[it.product_id]) ? { type: 'product', id: it.product_id, qty: i.qty * it.qty } : { type: i.type, id: i.id, qty: i.qty };
+      var same = out.filter(function (x) { return x.type === t.type && x.id === t.id; })[0];
+      if (same) same.qty += t.qty; else out.push(t);
+    });
+    out.forEach(function (x) { x.qty = Math.min(x.type === 'product' ? MAX_UNITS : 20, x.qty); });
+    cart = out;
+  }
+  // what the server is asked to price: packs as offers, the rest as single products
+  function orderItems() {
+    var items = [];
+    cart.forEach(function (i) {
+      if (i.type !== 'product') { items.push({ type: i.type, id: i.id, qty: i.qty }); return; }
+      var sp = splitPacks(i.id, i.qty);
+      sp.used.forEach(function (u) { items.push({ type: 'offer', id: u.o.id, qty: u.k }); });
+      if (sp.left) items.push({ type: 'product', id: i.id, qty: sp.left });
+    });
+    return items;
+  }
   function cartCount() { return cart.reduce(function (s, i) { return s + i.qty; }, 0); }
 
   function addToCart(type, id, qty) {
     var item = cart.filter(function (i) { return i.type === type && i.id === id; })[0];
-    if (item) item.qty = Math.min(20, item.qty + (qty || 1));
+    if (item) item.qty += (qty || 1);
     else cart.push({ type: type, id: id, qty: qty || 1 });
     saveCart();
     var btn = $('#cartBtn');
@@ -897,24 +958,56 @@
     if (it.type === 'product') {
       var p = prodById[it.id];
       if (!p) return null;
-      return { key: 'product:' + p.id, name: p.name, sub: p.category, unit: p.price, compare: p.price, art: productArt(p), ok: buyable(p) && p.in_stock, qty: it.qty };
+      var sp = splitPacks(p.id, it.qty), total = 0, compare = 0, deal = '', nudge = null;
+      sp.used.forEach(function (u) { total += u.k * u.o.price; compare += u.k * (u.o.compare_at || u.o.price); });
+      total += sp.left * p.price; compare += sp.left * p.price;
+      var packSave = it.qty * p.price - total;
+      if (sp.used.length) deal = sp.used.map(function (u) { return (u.k > 1 ? u.k + ' \u00d7 ' : '') + 'Pack of ' + u.n; }).join(' + ') + ' applied';
+      // nudge: the smallest pack the leftover units could grow into
+      var all = packsFor(p.id).slice().reverse();
+      if (sp.left) {
+        var nx = all.filter(function (o) { return o.items[0].qty > sp.left; })[0];
+        if (nx && it.qty + nx.items[0].qty - sp.left <= MAX_UNITS) {
+          var n = nx.items[0].qty, add = n - sp.left;
+          nudge = { add: add, text: 'Add ' + add + ' more \u2192 ' + n + ' for ' + inr(nx.price) + ' (save ' + inr(n * p.price - nx.price) + ')' };
+        }
+      }
+      return { key: 'product:' + p.id, name: p.name, sub: p.category, unit: p.price, total: total, compareTotal: Math.max(compare, total), packSave: packSave, deal: deal, nudge: nudge,
+        art: productArt(p), ok: buyable(p) && p.in_stock, qty: it.qty };
     }
     var o = offerById[it.id];
     if (!o) return null;
-    return { key: 'offer:' + o.id, name: o.name, sub: o.contents, unit: o.price, compare: o.compare_at, art: offerArt(o, true), ok: o.in_stock !== false, qty: it.qty };
+    return { key: 'offer:' + o.id, name: o.name, sub: o.contents, unit: o.price, total: o.price * it.qty, compareTotal: Math.max(o.compare_at || 0, o.price) * it.qty, art: offerArt(o, true), ok: o.in_stock !== false, qty: it.qty };
   }
 
-  function totals() {
+  function prepaidRule() { var s = catalog.shipping || {}; return catalog.payments && catalog.payments.razorpay && s.prepaid_fee != null ? s : null; }
+  function shipRule(method) { var s = catalog.shipping || {}; return method === 'razorpay' && prepaidRule() ? Object.assign({}, s, { fee: s.prepaid_fee }) : s; }
+  function totals(method) {
     var lines = cart.map(resolve).filter(Boolean);
     var subtotal = 0, compare = 0;
-    lines.forEach(function (l) { if (l.ok) { subtotal += l.unit * l.qty; compare += l.compare * l.qty; } });
-    var s = catalog.shipping || {};
-    var free = s.include_equal ? subtotal >= s.free_above : subtotal > s.free_above;
+    lines.forEach(function (l) { if (l.ok) { subtotal += l.total; compare += l.compareTotal; } });
+    var s = shipRule(method);
+    var free = s.free_above != null && (s.include_equal ? subtotal >= s.free_above : subtotal > s.free_above);
     var shipping = subtotal > 0 && !free ? (s.fee || 0) : 0;
     return { lines: lines, subtotal: subtotal, savings: Math.max(0, compare - subtotal), shipping: shipping, total: subtotal + shipping };
   }
 
-  function summaryRows(t) {
+  // shipping per payment method, when they differ (else null): { cod, online }
+  function shipChoice(t) {
+    if (!t.subtotal || !(catalog.payments && catalog.payments.cod && catalog.payments.razorpay)) return null;
+    var cod = totals('cod').shipping, online = totals('razorpay').shipping;
+    return cod === online ? null : { cod: cod, online: online };
+  }
+  function summaryRows(t, pending) {
+    var ch = pending ? shipChoice(t) : null;
+    if (ch) {
+      var items = t.subtotal - (t.discount || 0);
+      return '<div class="sum-row"><span>Subtotal</span><span>' + inr(t.subtotal) + '</span></div>' +
+        (t.savings ? '<div class="sum-row save"><span>You save</span><span>− ' + inr(t.savings) + '</span></div>' : '') +
+        '<div class="sum-row ship-choice"><span>Shipping</span><span>Chosen at payment</span></div>' +
+        '<div class="ship-opts"><span>Pay online: <b>' + (ch.online ? inr(ch.online) : 'Free') + '</b></span><span>Cash on Delivery: <b>' + (ch.cod ? inr(ch.cod) : 'Free') + '</b></span></div>' +
+        '<div class="sum-row total"><span>Total</span><span>' + inr(items) + ' <small class="plus-ship">+ shipping</small></span></div>';
+    }
     return '<div class="sum-row"><span>Subtotal</span><span>' + inr(t.subtotal) + '</span></div>' +
       (t.savings ? '<div class="sum-row save"><span>You save</span><span>− ' + inr(t.savings) + '</span></div>' : '') +
       (t.discount ? '<div class="sum-row save"><span>Coupon ' + esc(t.coupon) + '</span><span>− ' + inr(t.discount) + '</span></div>' : '') +
@@ -943,19 +1036,23 @@
               '<button type="button" class="link-btn" data-remove>Remove</button></div>'
             : '<div class="line-actions"><small style="color:#b3261e">No longer available</small><button type="button" class="link-btn" data-remove>Remove</button></div>') +
         '</div>' +
-        '<div class="line-price">' + inr(l.unit * l.qty) + (l.compare > l.unit ? '<s>' + inr(l.compare * l.qty) + '</s>' : '') + '</div>' +
+        '<div class="line-price">' + inr(l.total) + (l.compareTotal > l.total ? '<s>' + inr(l.compareTotal) + '</s>' : '') + '</div>' +
+        (l.ok && (l.deal || l.nudge) ? '<div class="line-deal">' +
+          (l.deal ? '<span class="on">\u2713 ' + esc(l.deal) + (l.packSave > 0 ? ' \u00b7 saved ' + inr(l.packSave) : '') + '</span>' : '') +
+          (l.nudge ? '<button type="button" data-addunits="' + l.nudge.add + '">' + esc(l.nudge.text) + '</button>' : '') + '</div>' : '') +
       '</div>';
     }).join('');
     var s = catalog.shipping || {};
     var progress = '';
-    if (s.fee && t.subtotal > 0) {
+    if (s.fee && t.subtotal > 0 && s.free_above != null) {
       var need = (s.include_equal ? s.free_above : s.free_above + 1) - t.subtotal;
       var pct = Math.min(100, Math.round(t.subtotal / Math.max(1, s.free_above) * 100));
       progress = '<div class="ship-progress">' + (need > 0 ? 'Add ' + inr(need) + ' more for free shipping' : 'You have unlocked free shipping') + '<div class="bar"><i style="width:' + pct + '%"></i></div></div>';
     }
     var anyBad = t.lines.some(function (l) { return !l.ok; });
-    foot.innerHTML = progress + summaryRows(t) +
-      '<button type="button" class="btn btn-rust btn-block" id="toCheckout"' + (anyBad || !t.subtotal ? ' disabled' : '') + '>Checkout · ' + inr(t.total) + ' ' + ARROW + '</button>' +
+    var choice = shipChoice(t);
+    foot.innerHTML = progress + summaryRows(t, true) +
+      '<button type="button" class="btn btn-rust btn-block" id="toCheckout"' + (anyBad || !t.subtotal ? ' disabled' : '') + '>Checkout · ' + inr(choice ? t.subtotal : t.total) + ' ' + ARROW + '</button>' +
       '<p class="muted-note">' + (anyBad ? 'Remove unavailable items to continue.' : [catalog.payments && catalog.payments.cod ? 'Cash on Delivery available' : '', shipNote()].filter(Boolean).join(' · ')) + '</p>';
   }
 
@@ -1011,6 +1108,7 @@
   function openCheckout() {
     var t = totals();
     if (!t.lines.length) return;
+    if (t.lines.some(function (l) { return !l.ok; })) { openCart(); toast('Remove unavailable items to continue.'); return; }
     if (!window.GomoAuth) { toast('Loading sign-in… please try again in a moment.'); return; }
     window.GomoAuth.require('checkout').then(startCheckout).catch(function () { /* sign-in closed */ });
   }
@@ -1083,8 +1181,8 @@
 
   function miniSummary(t) {
     return '<aside class="ck-summary"><h4>Your order</h4>' +
-      t.lines.filter(function (l) { return l.ok; }).map(function (l) { return '<div class="mini"><span>' + l.qty + ' × ' + esc(l.name) + '</span><span>' + inr(l.unit * l.qty) + '</span></div>'; }).join('') +
-      '<div style="margin-top:10px">' + summaryRows(t) + '</div></aside>';
+      t.lines.filter(function (l) { return l.ok; }).map(function (l) { return '<div class="mini"><span>' + l.qty + ' × ' + esc(l.name) + '</span><span>' + inr(l.total) + '</span></div>'; }).join('') +
+      '<div style="margin-top:10px">' + summaryRows(t, ck.step < 3 && !ck.result) + '</div></aside>';
   }
 
   function contactBox(p) {
@@ -1101,9 +1199,9 @@
 
   // Totals with the coupon the server confirmed (re-checked again when the order is placed).
   function ckTotals() {
-    var t = totals();
+    var t = totals(ck.values && ck.values.payment_method);
     var c = ck.coupon;
-    if (c && c.subtotal === t.subtotal) { t.discount = c.discount; t.coupon = c.code; t.shipping = c.shipping; t.total = c.total; }
+    if (c && c.subtotal === t.subtotal && (c.method || 'cod') === ((ck.values && ck.values.payment_method) || 'cod')) { t.discount = c.discount; t.coupon = c.code; t.shipping = c.shipping; t.total = c.total; }
     else if (c) ck.coupon = null; // cart changed: ask again
     return t;
   }
@@ -1121,9 +1219,9 @@
     ck.couponTyped = code;
     if (!code) { ck.couponError = 'Enter a code.'; return renderCheckout(); }
     ck.couponBusy = true; ck.couponError = ''; renderCheckout();
-    var t = totals();
-    api('/api/coupons/check', { method: 'POST', body: { code: code, phone: orderPhone(), items: cart.map(function (i) { return { type: i.type, id: i.id, qty: i.qty }; }) } })
-      .then(function (d) { ck.coupon = Object.assign({ subtotal: t.subtotal }, d.coupon); ck.couponBusy = false; renderCheckout(); toast(d.coupon.message); })
+    var t = totals(ck.values.payment_method);
+    api('/api/coupons/check', { method: 'POST', body: { code: code, phone: orderPhone(), payment_method: ck.values.payment_method, items: orderItems() } })
+      .then(function (d) { ck.coupon = Object.assign({ subtotal: t.subtotal, method: ck.values.payment_method }, d.coupon); ck.couponBusy = false; renderCheckout(); toast(d.coupon.message); })
       .catch(function (err) { ck.couponBusy = false; ck.couponError = err.message; renderCheckout(); });
   }
 
@@ -1174,7 +1272,8 @@
         var v = ck.values;
         var opts = [];
         if (catalog.payments.cod) opts.push(['cod', 'Cash on Delivery', 'Pay in cash or UPI when your order arrives.']);
-        if (catalog.payments.razorpay) opts.push(['razorpay', 'Pay online', 'UPI, cards, net banking and wallets via Razorpay.']);
+        if (catalog.payments.razorpay) { var pr = prepaidRule(), pt = pr ? totals('razorpay').shipping : null, ct = totals('cod').shipping;
+          opts.push(['razorpay', 'Pay online' + (pr && pt < ct ? (pt === 0 ? ' · Free delivery' : ' · Delivery ' + inr(pt)) : ''), 'UPI, cards, net banking and wallets via Razorpay.']); }
         form = '<div class="pay-opts" role="radiogroup" aria-label="Payment method">' + opts.map(function (o) {
           return '<label class="pay-opt' + (v.payment_method === o[0] ? ' on' : '') + '"><input type="radio" name="payment_method" value="' + o[0] + '"' + (v.payment_method === o[0] ? ' checked' : '') + '>' +
             '<span><b>' + o[1] + '</b><small>' + o[2] + '</small></span></label>';
@@ -1189,7 +1288,7 @@
         ? '<button type="button" class="btn btn-rust" data-ck="next">Continue ' + ARROW + '</button>'
         : '<button type="button" class="btn btn-rust" data-ck="place"' + (ck.busy ? ' disabled' : '') + '>' +
           (ck.busy ? '<span class="spinner"></span> Placing order…' : (ck.values.payment_method === 'razorpay' ? 'Pay ' + inr(t.total) : 'Place order · ' + inr(t.total))) + '</button>';
-      foot = back + next;
+      foot = back + next + (ck.step === 3 ? '<p class="consent-note">By placing this order you agree to our <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy-policy" target="_blank" rel="noopener">Privacy policy</a>.</p>' : '');
     }
 
     m.querySelector('.modal-card').innerHTML =
@@ -1203,8 +1302,9 @@
     if (r.kind === 'pending') {
       return '<div class="done-wrap"><div class="done-ic warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg></div>' +
         '<h3>Payment not completed</h3><p>Your order <b>' + esc(o.order_no) + '</b> is saved but not paid yet. ' + (r.message ? esc(r.message) : '') + '</p>' +
-        '<div class="done-actions"><button type="button" class="btn btn-rust" data-ck="retry">Try payment again</button>' +
-        (catalog.payments.cod ? '<button type="button" class="btn btn-line" data-ck="cod">Pay with Cash on Delivery</button>' : '') + '</div></div>';
+        '<div class="done-actions"><button type="button" class="btn btn-rust" data-ck="retry"' + (ck.busy ? ' disabled' : '') + '>Try payment again</button>' +
+        (catalog.payments.cod ? '<button type="button" class="btn btn-line" data-ck="cod"' + (ck.busy ? ' disabled' : '') + '>Pay with Cash on Delivery</button>' : '') + '</div>' +
+        '<p class="muted-note">Money already taken from your account? <button type="button" class="link-btn" data-ck="paycheck"' + (ck.busy ? ' disabled' : '') + '>' + (ck.busy === 'paycheck' ? 'Checking with the bank…' : 'Check payment') + '</button> — we\'ll confirm it with Razorpay, so you are never charged twice.</p></div>';
     }
     var channels = [p && p.whatsapp_status !== 'unavailable' ? 'WhatsApp' : null, p && p.email && p.email_verified ? 'email' : null].filter(Boolean);
     return '<div class="done-wrap"><div class="done-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div>' +
@@ -1221,7 +1321,7 @@
 
   function waOrderText(t) {
     return 'Hi! I\'d like to order from ' + catalog.store.name + ':\n' +
-      t.lines.filter(function (l) { return l.ok; }).map(function (l) { return '• ' + l.qty + ' × ' + l.name + ' — ' + inr(l.unit * l.qty); }).join('\n') +
+      t.lines.filter(function (l) { return l.ok; }).map(function (l) { return '• ' + l.qty + ' × ' + l.name + ' — ' + inr(l.total); }).join('\n') +
       '\nTotal: ' + inr(t.total);
   }
 
@@ -1254,7 +1354,7 @@
     api('/api/orders', {
       method: 'POST',
       body: {
-        items: cart.map(function (i) { return { type: i.type, id: i.id, qty: i.qty }; }),
+        items: orderItems(),
         customer: { name: v.name.trim(), phone: orderPhone() },
         address: deliveryAddress(),
         save_address: ck.addr === 'new' && ck.saveAddr,
@@ -1362,14 +1462,30 @@
 
   function retryPay() {
     var o = ck.result.order;
-    api('/api/orders/' + encodeURIComponent(o.order_no) + '/retry-payment', { method: 'POST', body: { phone: (profile() || {}).phone } })
-      .then(function (d) { payOnline(o, d.razorpay); })
+    api('/api/orders/' + encodeURIComponent(o.order_no) + '/retry-payment', { method: 'POST', body: { phone: orderPhone() } })
+      .then(function (d) { if (d.already_paid) orderDone(d.order); else payOnline(o, d.razorpay); })
       .catch(function (err) { ck.result.message = err.message; renderCheckout(); });
+  }
+
+  // The bank took the money but the payment window never reported back: ask the server to check with Razorpay.
+  function checkPaid() {
+    var o = ck.result.order;
+    ck.busy = 'paycheck'; renderCheckout();
+    api('/api/orders/' + encodeURIComponent(o.order_no) + '/check-payment', { method: 'POST', body: { phone: orderPhone() } })
+      .then(function (d) {
+        ck.busy = false;
+        if (d.paid) return orderDone(d.order);
+        ck.result.message = d.state === 'authorized'
+          ? 'Your bank has approved the payment and it is being confirmed. Please check again in a few minutes — don\'t pay again.'
+          : 'We couldn\'t find a completed payment yet. If money was taken, it usually shows within a few minutes; otherwise the bank returns it automatically.';
+        renderCheckout();
+      })
+      .catch(function (err) { ck.busy = false; ck.result.message = err.message; renderCheckout(); });
   }
 
   function switchCod() {
     var o = ck.result.order;
-    api('/api/orders/' + encodeURIComponent(o.order_no) + '/switch-to-cod', { method: 'POST', body: { phone: (profile() || {}).phone } })
+    api('/api/orders/' + encodeURIComponent(o.order_no) + '/switch-to-cod', { method: 'POST', body: { phone: orderPhone() } })
       .then(function (d) { orderDone(d.order); })
       .catch(function (err) { ck.result.message = err.message; renderCheckout(); });
   }
@@ -1465,7 +1581,7 @@
       var popt = t.closest('[data-popt]');
       if (popt) { pdp.option = popt.getAttribute('data-popt'); renderProductPage(); return; }
       var pimg = t.closest('[data-pimg]');
-      if (pimg) { pdp.img = Number(pimg.getAttribute('data-pimg')) || 0; renderProductPage(); return; }
+      if (pimg) { pdp.img = Number(pimg.getAttribute('data-pimg')) || 0; renderProductPage(); renderOfferPage(); return; }
       if (t.closest('#acctBtn')) {
         e.preventDefault();
         location.href = '/account';
@@ -1490,7 +1606,10 @@
         var key = line.getAttribute('data-key').split(':');
         var item = cart.filter(function (i) { return i.type === key[0] && i.id === key.slice(1).join(':'); })[0];
         if (item && t.closest('[data-step]')) {
-          item.qty = Math.max(1, Math.min(20, item.qty + Number(t.closest('[data-step]').getAttribute('data-step'))));
+          item.qty = Math.max(1, Math.min(item.type === 'product' ? MAX_UNITS : 20, item.qty + Number(t.closest('[data-step]').getAttribute('data-step'))));
+          saveCart();
+        } else if (item && t.closest('[data-addunits]')) {
+          item.qty = Math.min(MAX_UNITS, item.qty + Number(t.closest('[data-addunits]').getAttribute('data-addunits')));
           saveCart();
         } else if (item && t.closest('[data-remove]')) {
           cart = cart.filter(function (i) { return i !== item; });
@@ -1509,6 +1628,7 @@
         else if (act === 'coupon') applyCoupon();
         else if (act === 'uncoupon') { ck.coupon = null; ck.couponTyped = ''; ck.couponError = ''; renderCheckout(); }
         else if (act === 'retry') retryPay();
+        else if (act === 'paycheck') checkPaid();
         else if (act === 'cod') switchCod();
         else if (act === 'locate') startLocate();
         else if (act === 'unpin') { ck.values.lat = ck.values.lng = ck.values.accuracy = null; renderCheckout(); }
@@ -1521,6 +1641,7 @@
     });
 
     document.addEventListener('input', function (e) {
+      if (e.target.id === 'ck-coupon') ck.couponTyped = e.target.value;
       var f = e.target.closest('#checkoutModal [name]');
       if (f && f.name !== 'addr_choice' && f.name !== 'payment_method') {
         ck.values[f.name] = f.value;
@@ -1557,6 +1678,7 @@
         if (e.key === 'ArrowLeft') { showPhoto(gi - 1); return; }
       }
       if (e.key === 'Escape' && openPanel) closeAll();
+      if (e.key === 'Enter' && e.target.id === 'ck-coupon') { e.preventDefault(); applyCoupon(); return; }
       if (e.key === 'Enter' && e.target.closest('#checkoutModal input')) {
         e.preventDefault();
         var next = $('#checkoutModal [data-ck="next"], #checkoutModal [data-ck="place"]');
@@ -1631,7 +1753,8 @@
   // ------------------------------------------------------------------ product photo gallery
   var gp = null, gi = 0, touchX = null;
   function openGallery(pid, i) {
-    gp = prodById[pid];
+    if (String(pid).indexOf('offer:') === 0) { var go = offerById[pid.slice(6)]; gp = go ? { id: pid, name: go.name, images: offerPhotos(go) } : null; }
+    else gp = prodById[pid];
     if (!hasPhoto(gp)) return;
     renderGallery();
     open($('#galleryModal'));
@@ -1685,6 +1808,7 @@
       store(CATALOG_KEY, data);
       indexCatalog();
       // drop cart lines that no longer exist
+      normalizeCart();
       cart = cart.filter(function (i) { return resolve(i); });
       store(CART_KEY, cart);
       renderAll();

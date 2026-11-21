@@ -103,8 +103,8 @@ export async function startOtp(env, opts, fetchImpl = fetch) {
 
   const t = safeKey(target);
   const limits = isEmail
-    ? [[`otp:e:${t}:h`, 5, 3600], [`otp:ip:${ip}:h`, 10, 3600]]
-    : [[`otp:p:${t}:h`, 5, 3600], [`otp:p:${t}:d`, 10, 86400], [`otp:ip:${ip}:h`, 10, 3600], [`otp:ip:${ip}:d`, 30, 86400]];
+    ? [[`otp:e:${t}:h`, 5, 3600], [`otp:ip:${ip}:h`, 40, 3600]]
+    : [[`otp:p:${t}:h`, 5, 3600], [`otp:p:${t}:d`, 10, 86400], [`otp:ip:${ip}:h`, 40, 3600], [`otp:ip:${ip}:d`, 150, 86400]];
   for (const [key, limit, win] of limits) {
     if (!(await rateLimit(env, key, limit, win))) throw new HttpError(429, 'Too many codes requested. Please try again later.', { code: 'rate_limited' });
   }

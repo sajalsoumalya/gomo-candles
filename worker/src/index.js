@@ -9,6 +9,7 @@ import {
 import {
   createOrder, verifyPayment, retryPayment, switchToCod, razorpayWebhook, trackOrder,
   adminListOrders, adminGetOrder, adminUpdateOrder, adminNotifyOrder, adminStats, checkCoupon, adminExportOrders,
+  expireUnpaidOrders, customerCancelOrder,
 } from './orders.js';
 import {
   adminGetSettings, adminPutSettings, adminTestNotification, adminListNotifications, adminRetryNotification,
@@ -16,7 +17,7 @@ import {
 } from './admin.js';
 import {
   requireCustomer, otpLoginStart, otpLoginVerify, getAccount, updateAccount, phoneStart, phoneVerify,
-  whatsappStart, whatsappVerify, emailStart, emailVerify, emailLoginStart, emailLoginVerify, listAddresses, createAddress, updateAddress, deleteAddress, myOrders,
+  whatsappStart, whatsappVerify, emailStart, emailVerify, emailLoginStart, emailLoginVerify, listAddresses, createAddress, updateAddress, deleteAddress, myOrders, exportMyData, deleteMyAccount,
 } from './account.js';
 import { geoReverse, geoPincode } from './geo.js';
 import {
@@ -28,6 +29,7 @@ import { adminGetInvoice } from './invoice.js';
 import { runBackup, adminBackupStatus, adminDownloadBackup } from './backup.js';
 import { adminCheckIntegrations } from './health.js';
 import { adminUploadFile, adminListFiles, adminUpdateFile, adminDeleteFile } from './files.js';
+import { checkPayment, adminCheckPayment, adminProcessRefund, adminRefreshRefund, pollRefunds } from './refunds.js';
 
 const ORDER_NO = '(GM-\\d{6}-\\d{4})';
 const ID = '([a-z0-9-]{1,64})';
@@ -36,15 +38,29 @@ const UID = '([A-Za-z0-9_-]{1,128})';
 const VARIANT = '(original|web|thumb)';
 
 // [method, pattern, handler(ctx), auth?]   auth: 'admin' | 'customer' | undefined (public)
+// Public catalog: the same for every visitor, so it is built at most once every CATALOG_TTL_MS per Worker instance
+// (and concurrent requests share one build). Orders never use this copy: they re-read prices and stock live.
+const CATALOG_TTL_MS = 15000;
+let catalogMemo = null; // { at, promise }
+function cachedCatalog(env, now = Date.now()) {
+  if (catalogMemo && now - catalogMemo.at < CATALOG_TTL_MS) return catalogMemo.promise;
+  const memo = { at: now, promise: getPublicCatalog(env) };
+  memo.promise.catch(() => { if (catalogMemo === memo) catalogMemo = null; }); // never keep a failure
+  catalogMemo = memo;
+  return memo.promise;
+}
+
 const routes = [
   ['GET', '/api/health', () => json({ ok: true })],
-  ['GET', '/api/catalog', async ({ env }) => json(await getPublicCatalog(env), 200, { 'cache-control': 'public, max-age=30' })],
+  ['GET', '/api/catalog', async ({ env }) => json(await cachedCatalog(env), 200, { 'cache-control': 'public, max-age=30' })],
   ['GET', '/api/states', () => json({ states: INDIAN_STATES }, 200, { 'cache-control': 'public, max-age=86400' })],
   ['POST', '/api/coupons/check', ({ request, env }) => checkCoupon(request, env)],
   ['POST', '/api/orders', ({ request, env, ctx }) => createOrder(request, env, ctx)],
   ['POST', `/api/orders/${ORDER_NO}/verify-payment`, ({ request, env, ctx, m }) => verifyPayment(request, env, ctx, m[1])],
   ['POST', `/api/orders/${ORDER_NO}/retry-payment`, ({ request, env, ctx, m }) => retryPayment(request, env, ctx, m[1])],
+  ['POST', `/api/orders/${ORDER_NO}/check-payment`, ({ request, env, ctx, m }) => checkPayment(request, env, ctx, m[1])],
   ['POST', `/api/orders/${ORDER_NO}/switch-to-cod`, ({ request, env, ctx, m }) => switchToCod(request, env, ctx, m[1])],
+  ['POST', `/api/orders/${ORDER_NO}/cancel`, ({ request, env, ctx, m }) => customerCancelOrder(request, env, ctx, m[1])],
   ['GET', '/api/track', ({ request, env }) => trackOrder(request, env)],
   ['POST', '/api/razorpay/webhook', ({ request, env, ctx }) => razorpayWebhook(request, env, ctx)],
 
@@ -66,6 +82,8 @@ const routes = [
   ['PUT', `/api/account/addresses/${MID}`, ({ request, env, m }) => updateAddress(request, env, m[1])],
   ['DELETE', `/api/account/addresses/${MID}`, ({ request, env, m }) => deleteAddress(request, env, m[1])],
   ['GET', '/api/account/orders', ({ request, env }) => myOrders(request, env)],
+  ['GET', '/api/account/export', ({ request, env }) => exportMyData(request, env)],
+  ['POST', '/api/account/delete', ({ request, env }) => deleteMyAccount(request, env)],
   ['GET', '/api/geo/reverse', ({ request, env, customer }) => geoReverse(request, env, customer.uid), 'customer'],
   ['GET', '/api/geo/pincode/([1-9]\\d{5})', ({ request, env, customer, m }) => geoPincode(request, env, customer.uid, m[1]), 'customer'],
 
@@ -128,6 +146,10 @@ const routes = [
   ['GET', '/api/admin/backups', ({ env }) => adminBackupStatus(env), 'admin'],
   ['POST', '/api/admin/backups/run', async ({ env }) => json({ backup: await runBackup(env, { force: true }) }), 'admin'],
   ['GET', '/api/admin/backups/(\\d{4}-\\d{2}-\\d{2}\\.json\\.gz)', ({ env, m }) => adminDownloadBackup(env, m[1]), 'admin'],
+  // online payments: ask Razorpay directly; refunds start only when an admin presses Process refund
+  ['POST', `/api/admin/orders/${ORDER_NO}/check-payment`, ({ env, ctx, m, admin }) => adminCheckPayment(env, ctx, m[1], admin), 'admin'],
+  ['POST', `/api/admin/orders/${ORDER_NO}/refund`, ({ request, env, m, admin }) => adminProcessRefund(request, env, m[1], admin), 'admin'],
+  ['POST', `/api/admin/orders/${ORDER_NO}/refund/refresh`, ({ env, m, admin }) => adminRefreshRefund(env, m[1], admin), 'admin'],
   ['GET', '/api/admin/storage', ({ env }) => adminStorageStats(env), 'admin'],
   ['POST', '/api/admin/storage/test', ({ env }) => adminTestStorage(env), 'admin'],
   ['POST', '/api/admin/storage/cleanup', async ({ env }) => json({ summary: await runCleanup(env, { sweep: true }) }), 'admin'],
@@ -203,6 +225,10 @@ export async function handle(request, env, ctx) {
 
 export async function scheduled(event, env, ctx) {
   ctx.waitUntil(runCleanup(env).then((s) => console.log('media cleanup', JSON.stringify(s))).catch((e) => console.error('cleanup failed', e?.stack || e)));
+  // Unpaid online orders: release their stock and coupon after UNPAID_HOLD_MIN minutes.
+  ctx.waitUntil(expireUnpaidOrders(env, { ctx }).then((s) => { if (s.expired.length) console.log('expired unpaid', JSON.stringify(s)); }).catch((e) => console.error('expire unpaid failed', e?.stack || e)));
+  // Refunds started from the admin: mark them Refunded once Razorpay has finished (backup for the webhook).
+  ctx.waitUntil(pollRefunds(env).then((s) => { if (s.done.length) console.log('refunds', JSON.stringify(s)); }).catch((e) => console.error('refund poll failed', e?.stack || e)));
   // Daily backup: the cron runs every 30 min; runBackup only does work once per IST day.
   ctx.waitUntil(runBackup(env).then((s) => { if (!s.skipped) console.log('backup', JSON.stringify(s)); }).catch((e) => console.error('backup failed', e?.stack || e)));
 }

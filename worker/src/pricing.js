@@ -29,10 +29,17 @@ export function offerContents(offer, productsById) {
   return (offer.items || []).map((it) => `${it.qty} × ${productsById[it.product_id]?.name || it.product_id}`).join(', ');
 }
 
+/** Shipping rule for a payment method. shipping.prepaid_fee: null = same as COD, 0 = free for online payment, n = that fee. */
+export function shippingRuleFor(rule, method) {
+  if (!rule || method !== 'razorpay' || rule.prepaid_fee == null) return rule;
+  return { ...rule, fee: rule.prepaid_fee };
+}
+
 export function shippingFor(subtotal, rule) {
   if (!rule || subtotal <= 0) return 0;
-  const above = Number(rule.free_above) || 0;
   const fee = Math.max(0, Math.round(Number(rule.fee) || 0));
+  if (rule.free_above == null || rule.free_above === '') return fee; // no free-shipping amount
+  const above = Number(rule.free_above) || 0;
   const free = rule.include_equal ? subtotal >= above : subtotal > above;
   return free ? 0 : fee;
 }

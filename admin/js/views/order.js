@@ -32,6 +32,9 @@ function draw(el, d, ctx) {
       <div class="actions">
         ${o.invoice?.number || o.status !== 'cancelled' ? `<button class="btn btn-line" id="invoice">${icon('print')} ${o.invoice?.number ? 'Invoice ' + esc(o.invoice.number) : 'Create invoice'}</button>` : ''}
         <button class="btn btn-line" id="print">${icon('print')} Packing slip</button></div></div>
+    ${['review', 'failed'].includes(o.refund?.status) && o.payment_status === 'paid' ? `<div class="alert err" style="margin-bottom:14px"><b>Refund ${o.refund.status === 'failed' ? 'failed' : 'awaiting review'}.</b> ${esc(o.refund.reason || 'Cancelled')} after an online payment of ${esc(inr(o.total))}. No money has been sent back yet — check the order, then press <b>Process refund</b> in the Payment card.</div>`
+      : o.status === 'cancelled' && o.cancelled_by === 'customer' ? `<div class="alert info" style="margin-bottom:14px">Cancelled by the customer.</div>`
+      : o.payment_attention && o.payment_status === 'paid' && o.status !== 'cancelled' ? `<div class="alert err" style="margin-bottom:14px"><b>Check this payment.</b> The amount received differs from the order total — see the timeline.</div>` : ''}
 
     <div class="grid g-main">
       <div class="grid" style="align-content:start">
@@ -99,10 +102,12 @@ function draw(el, d, ctx) {
             <dt>Status</dt><dd>${paymentPill(o)}</dd>
             ${o.razorpay_order_id ? `<dt>Razorpay order</dt><dd class="mono">${esc(o.razorpay_order_id)}</dd>` : ''}
             ${o.razorpay_payment_id ? `<dt>Payment id</dt><dd class="mono">${esc(o.razorpay_payment_id)}</dd>` : ''}</dl>
+          ${refundBox(o)}
           <div class="quick">
+            ${o.payment_method === 'razorpay' && !['paid', 'refunded'].includes(o.payment_status) ? `<button class="btn btn-line btn-sm" id="checkPay" title="Asks Razorpay directly whether the customer paid (for when money left their account but the website never heard back).">${icon('refresh')} Check payment with Razorpay</button>` : ''}
             ${!canPay() ? '<span class="muted" style="font-size:.8rem">Payment changes need the “Mark orders paid / refunded” permission.</span>' : ''}
-            ${canPay() && o.payment_status !== 'paid' && o.status !== 'cancelled' ? `<button class="btn btn-primary btn-sm" id="markPaid">${o.payment_method === 'cod' ? 'Mark cash collected' : 'Mark as paid'}</button>` : ''}
-            ${canPay() && o.payment_status === 'paid' ? '<button class="btn btn-ghost btn-sm" id="markRefund">Mark refunded</button>' : ''}
+            ${canPay() && o.payment_status !== 'paid' && o.payment_status !== 'refunded' && o.status !== 'cancelled' ? `<button class="btn btn-primary btn-sm" id="markPaid">${o.payment_method === 'cod' ? 'Mark cash collected' : 'Mark as paid'}</button>` : ''}
+            ${canPay() && o.payment_status === 'paid' && !['review', 'processing', 'failed'].includes(o.refund?.status) ? `<button class="btn btn-ghost btn-sm" id="markRefund">${o.payment_method === 'razorpay' ? 'Mark refunded (done outside)' : 'Mark refunded'}</button>` : ''}
           </div>
         </div>
 
@@ -174,6 +179,52 @@ function draw(el, d, ctx) {
     try { reload(await api(`/api/admin/orders/${o.order_no}`, { method: 'PATCH', body: { payment_status: 'refunded' } })); }
     catch (err) { toast(err.message, 'err'); }
   });
+  el.querySelector('#checkPay')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    busy(btn, true, 'Asking Razorpay…');
+    try {
+      const r = await api(`/api/admin/orders/${o.order_no}/check-payment`, { method: 'POST' });
+      const msg = {
+        paid: r.already ? 'Already recorded as paid.' : 'Payment found at Razorpay and recorded.',
+        authorized: 'The bank approved a payment; Razorpay is still confirming it. Check again in a few minutes.',
+        not_paid: 'Razorpay has no completed payment for this order.',
+        not_configured: 'Razorpay is not connected on the server.',
+      }[r.state] || 'Checked.';
+      toast(msg, r.paid ? 'ok' : r.state === 'authorized' ? 'ok' : 'err');
+      reload();
+    } catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  });
+  const rf = el.querySelector('#refundForm');
+  rf?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const amount = Number(rf.querySelector('#rfAmt').value);
+    if (!(await confirmDialog({
+      title: `Refund ${inr(amount)}?`,
+      message: `Razorpay will send ${inr(amount)} back to ${o.customer_name}'s original payment method (usually 5–7 working days). This can't be undone.`,
+      confirmText: 'Yes, process refund', danger: true,
+    }))) return;
+    const btn = rf.querySelector('#rfGo');
+    busy(btn, true, 'Sending to Razorpay…');
+    try {
+      const r = await api(`/api/admin/orders/${o.order_no}/refund`, { method: 'POST', body: { amount, note: rf.querySelector('#rfNote').value } });
+      toast(r.refund?.status === 'processed' ? 'Refund completed' : 'Refund initiated at Razorpay', 'ok');
+      reload();
+    } catch (err) {
+      busy(btn, false);
+      if (err.data?.fields) showFieldErrors(rf, err.data.fields);
+      toast(err.message, 'err');
+      if (err.status !== 422) reload();
+    }
+  });
+  el.querySelector('#rfRefresh')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    busy(btn, true, 'Checking…');
+    try {
+      const r = await api(`/api/admin/orders/${o.order_no}/refund/refresh`, { method: 'POST' });
+      toast(r.refund?.status === 'processed' ? 'Refund completed' : r.refund?.status === 'failed' ? 'Razorpay reports the refund failed' : 'Still in progress at Razorpay', r.refund?.status === 'failed' ? 'err' : 'ok');
+      reload();
+    } catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  });
   el.querySelector('#resend').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     busy(btn, true, 'Sending…');
@@ -184,6 +235,35 @@ function draw(el, d, ctx) {
       reload();
     } catch (err) { busy(btn, false); toast(err.message, 'err'); }
   });
+}
+
+// Online refund: awaiting review → (Process refund) → initiated → refunded
+function refundBox(o) {
+  const rf = o.refund;
+  if (!rf || o.payment_method !== 'razorpay') return '';
+  if ((rf.status === 'review' || rf.status === 'failed') && o.payment_status === 'paid') {
+    return `<div class="refund-box ${rf.status}">
+      <b>${rf.status === 'failed' ? 'Refund failed' : 'Refund: awaiting review'}</b>
+      <p>${rf.status === 'failed' ? `${esc(rf.error || 'Razorpay could not complete the refund.')} You can try again.` : `${esc(rf.reason || 'Order cancelled')}. No money has been sent back yet.`}${rf.error && rf.status === 'review' ? ` <br><small>${esc(rf.error)}</small>` : ''}</p>
+      ${canPay() ? `<form class="form" id="refundForm" novalidate>
+        <div class="form-row">
+          <div class="field" data-field="amount"><label for="rfAmt">Refund amount (₹)</label><input id="rfAmt" type="number" min="1" max="${esc(o.total)}" step="1" value="${esc(rf.amount || o.total)}" inputmode="numeric"><div class="hint">Full payment: ${inr(o.total)}. Lower it for a partial refund.</div></div>
+          <div class="field" data-field="note"><label for="rfNote">Note <i>(optional, internal)</i></label><input id="rfNote" maxlength="200"></div>
+        </div>
+        <div><button class="btn btn-primary" type="submit" id="rfGo">Process refund</button></div>
+        <p class="muted" style="font-size:.78rem;margin:0">Razorpay returns the money to the customer's original payment method, usually in 5–7 working days.</p>
+      </form>` : '<p class="muted" style="font-size:.8rem">Processing refunds needs the “Mark orders paid / refunded” permission.</p>'}</div>`;
+  }
+  if (rf.status === 'processing') {
+    return `<div class="refund-box processing"><b>Refund initiated · ${inr(rf.amount)}</b>
+      <p>Razorpay refund <span class="mono">${esc(rf.refund_id || '')}</span>, started ${esc(fmtDate(rf.initiated_at))}${rf.initiated_by ? ` by ${esc(rf.initiated_by)}` : ''}. It changes to Refunded when Razorpay confirms.</p>
+      <button class="btn btn-line btn-sm" id="rfRefresh">${icon('refresh')} Refresh refund status</button></div>`;
+  }
+  if (rf.status === 'processed') {
+    return `<div class="refund-box processed"><b>Refunded ${inr(rf.amount)}</b>
+      <p>Completed ${esc(fmtDate(rf.processed_at))}${rf.arn ? ` · bank reference <span class="mono">${esc(rf.arn)}</span>` : ''}${rf.refund_id ? ` · <span class="mono">${esc(rf.refund_id)}</span>` : ''}</p></div>`;
+  }
+  return '';
 }
 
 const money = (n) => '₹' + (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

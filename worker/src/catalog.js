@@ -126,6 +126,8 @@ export async function adminCreateProduct(env, body) {
     in_stock: (v.in_stock ?? 1) === 1, orderable: (v.orderable ?? 1) === 1, published: (v.published ?? 0) === 1,
     sort: v.sort ?? 100, created_at: now, updated_at: now,
   };
+  // optional fields from the form (kept like on edit; absent = not tracked / store default)
+  for (const k of ['stock', 'low_stock_at', 'hsn', 'gst_rate']) if (v[k] !== undefined && v[k] !== null) row[k] = v[k];
   await db(env).put(`products/${id}`, row);
   return json({ product: toProduct(row) }, 201);
 }

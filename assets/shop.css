@@ -41,18 +41,27 @@ body.ui-lock{overflow:hidden}
 .line small{display:block;font-size:.74rem;color:var(--muted);margin-top:3px;line-height:1.4}
 .line .line-price{font-family:var(--f-d);font-weight:600;font-size:1.05rem;text-align:right;white-space:nowrap}
 .line .line-price s{display:block;font-family:var(--f-b);font-size:.72rem;font-weight:400;color:var(--muted)}
+.line-deal{grid-column:2/-1;display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:-6px;font-size:.72rem;line-height:1.35}
+.line-deal .on{color:var(--sage,#4f7a69);font-weight:700}
+.line-deal button{all:unset;cursor:pointer;color:var(--rust);font-weight:700;text-decoration:underline;text-underline-offset:2px}
+.line-deal button:focus-visible{outline:2px solid var(--rust);outline-offset:2px}
 .line-actions{display:flex;align-items:center;gap:12px;margin-top:8px}
 .stepper{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:var(--pill);background:#fff}
 .stepper button{width:30px;height:30px;font-size:1rem;font-weight:600;color:var(--ink-2);border-radius:50%}
 .stepper button:hover{background:var(--tile)}
 .stepper span{min-width:22px;text-align:center;font-size:.85rem;font-weight:600}
 .link-btn{font-size:.76rem;color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+.link-btn.danger{color:#b3261e}
 .link-btn:hover{color:var(--rust)}
 
 .sum-row{display:flex;justify-content:space-between;gap:12px;font-size:.88rem;color:var(--muted);padding:3px 0}
 .sum-row.save{color:#2f7a4f;font-weight:600}
 .sum-row.total{color:var(--ink);font-size:1.05rem;font-weight:700;padding-top:10px;margin-top:6px;border-top:1px dashed var(--line)}
 .sum-row.total span:last-child{font-family:var(--f-d);font-size:1.4rem;color:var(--rust)}
+.ship-opts{display:flex;flex-wrap:wrap;gap:2px 14px;margin:-2px 0 6px;font-size:.74rem;color:var(--muted)}
+.ship-opts b{color:var(--ink)}
+.plus-ship{font-family:var(--f-b);font-size:.68rem;font-weight:500;color:var(--muted)}
+.prepaid-tip{margin:-4px 0 10px;font-size:.76rem;font-weight:600;color:var(--sage,#4f7a69)}
 .ship-progress{margin:6px 0 12px;font-size:.78rem;color:var(--muted)}
 .ship-progress .bar{height:6px;border-radius:6px;background:var(--tile-2);margin-top:6px;overflow:hidden}
 .ship-progress .bar i{display:block;height:100%;background:var(--rust);border-radius:6px;transition:width .4s}
@@ -214,6 +223,7 @@ body.ui-lock{overflow:hidden}
 .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--line)}
 .google-btn{justify-content:center}
 .google-btn svg{width:18px;height:18px}
+.spam-tip{flex-basis:100%;font-size:.78rem;color:var(--muted);line-height:1.4}
 .auth-links{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px}
 .auth-sent{font-size:.9rem;line-height:1.5;color:var(--ink-2);margin-bottom:14px}
 .auth-sent .link-btn{margin-left:6px}
@@ -516,3 +526,17 @@ img.is-cutout{background:transparent!important;object-fit:contain!important;bord
 .combo .combo-art .offer-photo.own.cutout{min-height:300px}
 .combo .combo-art .offer-photo.own.cutout img{width:100%;height:auto;max-height:440px;transform:scale(1.12);transform-origin:center 60%}
 @media (max-width:640px){.combo .combo-art .offer-photo.own.cutout{min-height:0}.combo .combo-art .offer-photo.own.cutout img{transform:none;max-height:260px}}
+
+/* privacy */
+.consent-note{flex-basis:100%;margin:8px 0 0;font-size:.72rem;color:var(--muted);text-align:center}
+.consent-note a{color:inherit}
+.ap-privacy{display:flex;flex-wrap:wrap;gap:8px 18px}
+
+/* touch targets: at least 44 px to tap on phones, without changing how things look */
+@media (pointer:coarse){
+  .stepper button{width:40px;height:40px}
+  .link-btn{position:relative;padding:8px 2px;margin:-8px -2px}
+  .x-btn{min-width:44px;min-height:44px}
+  .line-deal button{padding:8px 0;margin:-8px 0}
+  .pdp-thumbs button{min-width:44px;min-height:44px}
+}

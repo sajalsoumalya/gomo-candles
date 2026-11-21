@@ -189,6 +189,7 @@ export function photosEditor(product, host) {
   host.addEventListener('dragover', (e) => { e.preventDefault(); host.querySelector('#phDrop')?.classList.add('over'); });
   host.addEventListener('dragleave', (e) => { if (!host.contains(e.relatedTarget)) host.querySelector('#phDrop')?.classList.remove('over'); });
   host.addEventListener('dragstart', (e) => { const t = e.target.closest('[data-tile]'); if (t) { dragKey = t.dataset.tile; e.dataTransfer.effectAllowed = 'move'; } });
+  host.addEventListener('dragend', () => { dragKey = null; });
   host.addEventListener('drop', (e) => {
     e.preventDefault();
     host.querySelector('#phDrop')?.classList.remove('over');
@@ -324,6 +325,8 @@ function editDialog(p, el, { focusPhotos = false } = {}) {
           art: f.querySelector('input[name="art"]:checked')?.value, sort: Number(f.querySelector('#ps').value || 0),
           orderable: f.querySelector('#po').checked, in_stock: f.querySelector('#pi').checked, stock: f.querySelector('#pst').value === '' ? null : Number(f.querySelector('#pst').value), low_stock_at: Number(f.querySelector('#plo').value || 5), hsn: f.querySelector('#phsn').value.trim(), gst_rate: f.querySelector('#pgst').value === '' ? null : Number(f.querySelector('#pgst').value), published: f.querySelector('#pv').checked,
         };
+        // stock moves with every order: only send it when it was changed here, so saving a typo fix can't undo sales
+        if (p && body.stock === (p.stock ?? null)) delete body.stock;
         if (photos) body.images = photos.payload();
         busy(btn, true);
         try {

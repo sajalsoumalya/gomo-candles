@@ -60,7 +60,7 @@ export const DEFAULT_OTP_MESSAGE = '🔐 *{{code}}* is your {{store_name}} verif
 
 export const DEFAULT_SETTINGS = {
   store: { name: 'GoMo Candles', whatsapp: '', email: 'support@earthenbeauty.in', shop_url: '' },
-  shipping: { free_above: 999, include_equal: false, fee: 0 },
+  shipping: { free_above: 999, include_equal: false, fee: 0, prepaid_fee: null },
   payments: { cod: true, razorpay: false },
   // GST invoices. Leave gstin empty to print a plain "Invoice" without tax lines.
   invoice: { legal_name: '', gstin: '', address: '', state: '', hsn: '3406', gst_rate: 5, prefix: 'GM' },
@@ -89,6 +89,7 @@ export async function getSettings(env) {
   const s = {};
   for (const k of KEYS) s[k] = merge(DEFAULT_SETTINGS[k], stored[k]);
   if (!s.store.shop_url && env.SHOP_URL) s.store.shop_url = env.SHOP_URL;
+  if (s.shipping.free_above === -1) s.shipping.free_above = null;
   return s;
 }
 
@@ -125,11 +126,16 @@ export function validateSettingsInput(body, env, current) {
   }
 
   if (body.shipping) {
-    const free_above = Number(body.shipping.free_above);
+    const fa = body.shipping.free_above;
+    const free_above = fa === '' || fa == null ? null : Number(fa);
     const fee = Number(body.shipping.fee);
-    if (!Number.isInteger(free_above) || free_above < 0) fields['shipping.free_above'] = 'Whole rupees, 0 or more.';
+    if (free_above != null && (!Number.isInteger(free_above) || free_above < 0)) fields['shipping.free_above'] = 'Whole rupees, 0 or more, or empty.';
     if (!Number.isInteger(fee) || fee < 0 || fee > 5000) fields['shipping.fee'] = 'Whole rupees, 0–5000.';
-    out.shipping = { free_above, fee, include_equal: Boolean(body.shipping.include_equal) };
+    const pf = body.shipping.prepaid_fee;
+    const prepaid_fee = pf === '' || pf == null ? null : Number(pf);
+    if (prepaid_fee != null && (!Number.isInteger(prepaid_fee) || prepaid_fee < 0 || prepaid_fee > 5000)) fields['shipping.prepaid_fee'] = 'Whole rupees, 0–5000, or empty.';
+    // the database drops nulls (and the default would come back), so "never free" is stored as -1
+    out.shipping = { free_above: free_above ?? -1, fee, include_equal: Boolean(body.shipping.include_equal), prepaid_fee };
   }
 
   if (body.payments) {

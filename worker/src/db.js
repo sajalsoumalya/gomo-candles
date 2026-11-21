@@ -82,11 +82,14 @@ export async function rateLimit(env, key, limit, windowSec) {
   const d = db(env);
   const path = `rate_limits/${safeKey(key)}`;
   const now = Math.floor(Date.now() / 1000);
-  for (let i = 0; i < 3; i++) {
+  let seen = 0;
+  for (let i = 0; i < 5; i++) {
     const { value, etag } = await d.getWithEtag(path);
     const fresh = !value || value.window_start <= now - windowSec;
     const next = fresh ? { window_start: now, count: 1 } : { window_start: value.window_start, count: value.count + 1 };
+    seen = next.count;
     if (await d.putIfMatch(path, next, etag)) return next.count <= limit;
   }
-  return true;
+  // Still contended after 5 tries = many requests on one key at once. Never fail open: judge by the last count seen.
+  return seen <= limit;
 }

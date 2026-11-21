@@ -19,8 +19,8 @@
   <meta property="og:title" content="Gift Sets · GoMo Candles" />
   <meta property="og:description" content="Combine the Evil Eye Candle, Sachets and Linen Mist into a thoughtful gift of calm and protection — put together with you on WhatsApp for birthdays, housewarmings and festivals." />
   <meta property="og:url" content="https://gomo.earthenbeauty.in/product/gift-sets" />
-  <meta property="og:image" content="https://gomo.earthenbeauty.in/assets/og/product-gift-sets.jpg?v=mwpyvopw" />
-  <meta property="og:image:secure_url" content="https://gomo.earthenbeauty.in/assets/og/product-gift-sets.jpg?v=mwpyvopw" />
+  <meta property="og:image" content="https://gomo.earthenbeauty.in/assets/og/product-gift-sets.jpg?v=mwqsx2yl" />
+  <meta property="og:image:secure_url" content="https://gomo.earthenbeauty.in/assets/og/product-gift-sets.jpg?v=mwqsx2yl" />
   <meta property="og:image:type" content="image/jpeg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -28,10 +28,10 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Gift Sets · GoMo Candles" />
   <meta name="twitter:description" content="Combine the Evil Eye Candle, Sachets and Linen Mist into a thoughtful gift of calm and protection — put together with you on WhatsApp for birthdays, housewarmings and festivals." />
-  <meta name="twitter:image" content="https://gomo.earthenbeauty.in/assets/og/product-gift-sets.jpg?v=mwpyvopw" />
+  <meta name="twitter:image" content="https://gomo.earthenbeauty.in/assets/og/product-gift-sets.jpg?v=mwqsx2yl" />
   <meta name="twitter:image:alt" content="Gift Sets" />
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"OnlineStore","name":"GoMo Candles","url":"https://gomo.earthenbeauty.in/","logo":"https://gomo.earthenbeauty.in/assets/brand/icon-512.png","image":"https://gomo.earthenbeauty.in/assets/social/og-1200x630.jpg?v=2","description":"Evil Eye candles, sachets and linen mist — aromatherapy and protection, handcrafted in Kolkata.","email":"support@earthenbeauty.in","address":{"@type":"PostalAddress","addressLocality":"Kolkata","addressRegion":"West Bengal","addressCountry":"IN"},"parentOrganization":{"@type":"Organization","name":"Earthen Beauty"},"sameAs":["https://instagram.com/gomocandles"]}</script>
-  <link rel="preload" as="image" href="assets/img/candle-desk-1600.webp" imagesrcset="assets/img/candle-desk-800.webp 800w, assets/img/candle-desk-1600.webp 1600w" imagesizes="(max-width:980px) 100vw, 640px" />
+  <link rel="preload" as="image" href="assets/img/hero-ritual-1080.webp" imagesrcset="assets/img/hero-ritual-640.webp 640w, assets/img/hero-ritual-1080.webp 1080w" imagesizes="(max-width:980px) 100vw, 640px" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
@@ -371,7 +371,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 /* Studio shots have a white background: multiply lets them sit on the tinted tiles. */
 img.studio{mix-blend-mode:multiply}
 .hero-photo{position:absolute;inset:6px 30px 20px 10px;margin:0;border-radius:var(--r-xl);overflow:hidden;box-shadow:0 30px 60px -20px rgba(60,35,15,.45);background:#3a281d}
-.hero-photo img{width:100%;height:100%;object-fit:cover;object-position:60% 55%;display:block}
+.hero-photo{background:none;box-shadow:none;border-radius:0;overflow:visible}
+.hero-photo::after{display:none}
+@media (min-width:981px){.hero-photo{transform:translateX(-60px)}}
+.hero-photo img{width:100%;height:100%;object-fit:contain;object-position:50% 50%;display:block;filter:drop-shadow(0 24px 30px rgba(60,35,15,.18))}
 .hero-photo::after{content:'';position:absolute;inset:0;background:linear-gradient(200deg,rgba(255,240,220,.08),transparent 40%,rgba(30,18,10,.18));pointer-events:none}
 .avatars span{overflow:hidden;background:#fff}
 .avatars img{width:100%;height:100%;object-fit:cover}
@@ -741,10 +744,10 @@ img.studio{mix-blend-mode:multiply}
       </div>
       <div class="proof r d3">
         <div class="avatars" aria-hidden="true">
-          <span><img class="studio" src="assets/img/candle-sq-160.webp" alt="" width="160" height="160"></span>
-          <span><img class="studio" src="assets/img/sachet-sq-160.webp" alt="" width="160" height="160"></span>
-          <span><img class="studio" src="assets/img/mist-sq-160.webp" alt="" width="160" height="160"></span>
-          <span><img src="assets/img/gift-sq-160.webp" alt="" width="160" height="160"></span>
+          <span><img data-photo="candle" data-size="sm" class="studio" src="assets/img/candle-sq-160.webp" alt="" width="160" height="160"></span>
+          <span><img data-photo="sachet" data-size="sm" class="studio" src="assets/img/sachet-sq-160.webp" alt="" width="160" height="160"></span>
+          <span><img data-photo="spray" data-size="sm" class="studio" src="assets/img/mist-sq-160.webp" alt="" width="160" height="160"></span>
+          <span><img data-photo="gift" data-size="sm" src="assets/img/gift-sq-160.webp" alt="" width="160" height="160"></span>
         </div>
         <div><b>100% Natural</b><small>Fragrances · Handcrafted in Kolkata</small></div>
       </div>
@@ -752,7 +755,7 @@ img.studio{mix-blend-mode:multiply}
 
     <div class="hero-visual r d2">
       <figure class="hero-photo">
-        <img src="assets/img/candle-desk-1600.webp" srcset="assets/img/candle-desk-800.webp 800w, assets/img/candle-desk-1600.webp 1600w" sizes="(max-width:980px) 100vw, 640px" width="1600" height="1378" alt="Evil Eye Candle glowing on a study desk beside a book and a plant" fetchpriority="high" decoding="async">
+        <img src="assets/img/hero-ritual-1080.webp" srcset="assets/img/hero-ritual-640.webp 640w, assets/img/hero-ritual-1080.webp 1080w" sizes="(max-width:980px) 100vw, 640px" width="1080" height="1080" alt="The GoMo ritual: Evil Eye Candle, Dutch Lavender Linen Mist and Evil Eye charm with lavender" fetchpriority="high" decoding="async">
       </figure>
 
       <div class="float-cards">
@@ -848,10 +851,10 @@ img.studio{mix-blend-mode:multiply}
       <div class="eyebrow r">Your Evening Ritual</div>
       <h2 class="h-sec r d1">Four steps to <em>peace</em></h2>
       <div class="steps">
-        <div class="step r"><div class="step-img"><img class="studio" src="assets/img/sachet-sq-480.webp" alt="Evil Eye charm" loading="lazy" decoding="async"></div><div class="step-n">01</div><b>Create the Space</b><p>Find a quiet corner. Dim the lights. Place your GoMo Candle or Sachet where you'll unwind.</p></div>
-        <div class="step r d1"><div class="step-img"><img class="studio" src="assets/img/candle-sq-480.webp" alt="Lit Evil Eye Candle" loading="lazy" decoding="async"></div><div class="step-n">02</div><b>Light &amp; Breathe</b><p>Light the candle and take three deep breaths. Let the fragrance settle over you like a warm embrace.</p></div>
-        <div class="step r d2"><div class="step-img"><img class="studio" src="assets/img/mist-sq-480.webp" alt="Lavender linen mist" loading="lazy" decoding="async"></div><div class="step-n">03</div><b>Mist Your Pillow</b><p>Two sprays of Linen Mist on your pillow. Let the scent prepare your mind for restful sleep.</p></div>
-        <div class="step r d3"><div class="step-img"><img class="cutout" src="assets/img/combo-trio-480.webp" alt="Candle, charm and mist together" loading="lazy" decoding="async"></div><div class="step-n">04</div><b>Rest &amp; Restore</b><p>Close your eyes. The Evil Eye watches over you. Wake up lighter, calmer, ready.</p></div>
+        <div class="step r"><div class="step-img"><img data-photo="sachet" data-size="md" class="studio" src="assets/img/sachet-sq-480.webp" alt="Evil Eye charm" loading="lazy" decoding="async"></div><div class="step-n">01</div><b>Create the Space</b><p>Find a quiet corner. Dim the lights. Place your GoMo Candle or Sachet where you'll unwind.</p></div>
+        <div class="step r d1"><div class="step-img"><img data-photo="candle" data-size="md" class="studio" src="assets/img/candle-sq-480.webp" alt="Lit Evil Eye Candle" loading="lazy" decoding="async"></div><div class="step-n">02</div><b>Light &amp; Breathe</b><p>Light the candle and take three deep breaths. Let the fragrance settle over you like a warm embrace.</p></div>
+        <div class="step r d2"><div class="step-img"><img data-photo="spray" data-size="md" class="studio" src="assets/img/mist-sq-480.webp" alt="Lavender linen mist" loading="lazy" decoding="async"></div><div class="step-n">03</div><b>Mist Your Pillow</b><p>Two sprays of Linen Mist on your pillow. Let the scent prepare your mind for restful sleep.</p></div>
+        <div class="step r d3"><div class="step-img"><img data-offer-photo="combo-trio" data-size="md" class="cutout" src="assets/img/combo-trio-480.webp" alt="Candle, charm and mist together" loading="lazy" decoding="async"></div><div class="step-n">04</div><b>Rest &amp; Restore</b><p>Close your eyes. The Evil Eye watches over you. Wake up lighter, calmer, ready.</p></div>
       </div>
     </div>
   </section>

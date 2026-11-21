@@ -140,18 +140,36 @@ function panel(p, d, root) {
   }
 
   if (tab === 'shipping') {
+    const sh = s.shipping, v = (x) => (x == null ? '' : esc(x));
     p.innerHTML = `<form class="card form" novalidate><h3>Shipping</h3>
+      <h4 style="margin:4px 0 -4px">Cash on Delivery orders</h4>
       <div class="form-row">
-        <div class="field" data-field="fee"><label for="sf">Delivery fee (₹)</label><input id="sf" type="number" min="0" value="${esc(s.shipping.fee)}" inputmode="numeric"><div class="hint">Charged when the order is below the free-shipping amount. 0 = always free.</div></div>
-        <div class="field" data-field="free_above"><label for="sa">Free shipping above (₹)</label><input id="sa" type="number" min="0" value="${esc(s.shipping.free_above)}" inputmode="numeric"></div>
+        <div class="field" data-field="fee"><label for="sf">Delivery charge (₹)</label><input id="sf" type="number" min="0" value="${v(sh.fee)}" inputmode="numeric"><div class="hint" id="sfHint"></div></div>
+        <div class="field" data-field="free_above"><label for="sa">Free delivery above (₹) <i>(optional)</i></label><input id="sa" type="number" min="0" value="${v(sh.free_above)}" inputmode="numeric" placeholder="Never free"><div class="hint">Empty = Cash on Delivery always pays the charge.</div></div>
       </div>
-      <label class="switch"><input type="checkbox" id="si" ${s.shipping.include_equal ? 'checked' : ''}><i></i>Orders of exactly this amount also ship free</label>
-      <div class="alert info" style="margin:0">Example: with ₹${esc(s.shipping.free_above)} ${s.shipping.include_equal ? 'and the switch on, a ₹' + esc(s.shipping.free_above) + ' order ships free' : 'and the switch off, a ₹' + esc(s.shipping.free_above) + ' order pays the fee'}.</div>
+      <label class="switch"><input type="checkbox" id="si" ${sh.include_equal ? 'checked' : ''}><i></i>Orders of exactly this amount also ship free</label>
+      <h4 style="margin:14px 0 -4px">Prepaid (online payment) orders</h4>
+      <div class="form-row">
+        <div class="field" data-field="prepaid_fee"><label for="spp">Delivery charge (₹)</label><input id="spp" type="number" min="0" value="${v(sh.prepaid_fee)}" inputmode="numeric" placeholder="Same as Cash on Delivery"><div class="hint" id="sppHint"></div></div>
+      </div>
+      <div class="alert info" style="margin:0" id="shipSummary"></div>
       <div><button class="btn btn-primary" type="submit">Save shipping</button></div></form>`;
     const f = p.querySelector('form');
+    const val = (id) => f.querySelector(id).value;
+    const money = (n) => (Number(n) === 0 ? '<b>Free</b>' : `<b>₹${esc(Number(n))}</b>`);
+    const pph = () => {
+      const fee = val('#sf') || 0, above = val('#sa'), pre = val('#spp');
+      f.querySelector('#sfHint').innerHTML = Number(fee) === 0 ? 'Shown to customers as <b>Free</b>.' : `Customers pay ${money(fee)}.`;
+      f.querySelector('#sppHint').innerHTML = pre === '' ? 'Empty = same as Cash on Delivery.' : Number(pre) === 0 ? 'Shown to customers as <b>Free delivery</b>.' : `Customers pay ${money(pre)}.`;
+      const codLine = Number(fee) === 0 ? 'Free' : `${money(fee)}${above !== '' ? `, free above ₹${esc(Number(above))}` : ''}`;
+      const preFee = pre === '' ? fee : pre;
+      const preLine = Number(preFee) === 0 ? '<b>Free</b>' : `${money(preFee)}${above !== '' ? `, free above ₹${esc(Number(above))}` : ''}`;
+      f.querySelector('#shipSummary').innerHTML = `Cash on Delivery: ${codLine}<br>Prepaid: ${preLine}`;
+    };
+    ['#sf', '#sa', '#spp'].forEach((id) => f.querySelector(id).addEventListener('input', pph)); pph();
     f.addEventListener('submit', (e) => {
       e.preventDefault();
-      save('shipping', { fee: Number(f.querySelector('#sf').value || 0), free_above: Number(f.querySelector('#sa').value || 0), include_equal: f.querySelector('#si').checked }, f.querySelector('[type=submit]'), f);
+      save('shipping', { fee: Number(val('#sf') || 0), free_above: val('#sa') === '' ? null : Number(val('#sa')), include_equal: f.querySelector('#si').checked, prepaid_fee: val('#spp') === '' ? null : Number(val('#spp')) }, f.querySelector('[type=submit]'), f);
     });
   }
 

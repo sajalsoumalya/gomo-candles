@@ -50,3 +50,40 @@ export function checkoutPayload(env, order, rzpOrder, storeName) {
     prefill: { name: order.customer_name, contact: '+91' + order.phone, email: order.email || '' },
   };
 }
+
+const basicAuth = (env) => 'Basic ' + btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`);
+const rzpMessage = (data, status) => String(data?.error?.description || data?.error?.reason || `Razorpay replied HTTP ${status}`).slice(0, 300);
+
+/** All payment attempts on a Razorpay order (GET /orders/:id/payments). Throws if Razorpay can't be reached. */
+export async function fetchOrderPayments(env, rzpOrderId, fetchImpl = fetch) {
+  if (!razorpayConfigured(env)) throw new HttpError(503, 'Razorpay is not connected.');
+  const res = await fetchImpl(`${API}/orders/${encodeURIComponent(rzpOrderId)}/payments`, { headers: { authorization: basicAuth(env) } });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new HttpError(502, `Couldn't check the payment with Razorpay: ${rzpMessage(data, res.status)}`);
+  return Array.isArray(data?.items) ? data.items : [];
+}
+
+/**
+ * Refund a captured payment (POST /payments/:id/refund). Amount in whole rupees. The idempotency key makes a
+ * retry after a timeout safe: Razorpay creates the refund only once for the same key and body.
+ * Returns { ok, status, data, message }; never throws for Razorpay's own errors (network errors do throw).
+ */
+export async function createRefund(env, paymentId, { amount, idempotencyKey, notes, receipt }, fetchImpl = fetch) {
+  if (!razorpayConfigured(env)) throw new HttpError(503, 'Razorpay is not connected.');
+  const res = await fetchImpl(`${API}/payments/${encodeURIComponent(paymentId)}/refund`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: basicAuth(env), 'x-refund-idempotency': idempotencyKey },
+    body: JSON.stringify({ amount: Math.round(amount * 100), speed: 'normal', notes, receipt }),
+  });
+  const data = await res.json().catch(() => null);
+  return { ok: res.ok && data?.entity === 'refund', status: res.status, data, message: res.ok ? null : rzpMessage(data, res.status) };
+}
+
+/** Current state of a refund: pending | processed | failed. */
+export async function fetchRefund(env, paymentId, refundId, fetchImpl = fetch) {
+  if (!razorpayConfigured(env)) throw new HttpError(503, 'Razorpay is not connected.');
+  const res = await fetchImpl(`${API}/payments/${encodeURIComponent(paymentId)}/refunds/${encodeURIComponent(refundId)}`, { headers: { authorization: basicAuth(env) } });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new HttpError(502, `Couldn't read the refund from Razorpay: ${rzpMessage(data, res.status)}`);
+  return data;
+}

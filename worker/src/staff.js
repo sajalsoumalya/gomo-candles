@@ -56,6 +56,7 @@ export function areaFor(method, path) {
   if (/^\/api\/admin\/customers/.test(path)) return 'customers';
   if (/^\/api\/admin\/notifications/.test(path)) return 'messages';
   if (/^\/api\/admin\/exports/.test(path)) return 'exports';
+  if (/^\/api\/admin\/orders\/[^/]+\/refund$/.test(path)) return 'payments_edit'; // moves money
   if (/^\/api\/admin\/(orders|stats)/.test(path)) return 'orders';
   return 'owner'; // anything new is owner-only until it is given an area
 }

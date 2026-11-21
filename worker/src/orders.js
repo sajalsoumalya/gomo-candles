@@ -1,5 +1,5 @@
 import { HttpError, json, newOrderNo, nowIso, readJson, readText, clientIp, STATUSES, STATUS_LABELS, PAYMENT_STATUSES } from './util.js';
-import { priceCart } from './pricing.js';
+import { priceCart, shippingFor, shippingRuleFor } from './pricing.js';
 import { loadCatalog } from './catalog.js';
 import { getSettings, integrations } from './settings.js';
 import { normalizePhone, validateOrderInput } from './validate.js';
@@ -10,8 +10,11 @@ import { requireCustomer, saveAddress } from './account.js';
 import { otpChannels } from './otp.js';
 import { evaluateCoupon, claimCoupon, releaseCoupon } from './coupons.js';
 import { stockNeeds, reserveStock, releaseStock } from './stock.js';
+import { refundReviewFields, reconcilePayment, refundWebhook } from './refunds.js';
 
-const ORDER_LIMIT_PER_HOUR = 10;
+const ORDER_LIMIT_PER_HOUR = 10;      // per signed-in account
+const ORDER_IP_LIMIT_PER_HOUR = 60;   // per IP: mobile networks put many customers behind one address
+const PAY_RETRY_LIMIT_PER_HOUR = 30;  // retry-payment / switch-to-COD per IP
 const TRACK_LIMIT_PER_HOUR = 40;
 const ADMIN_SCAN_LIMIT = 1000; // newest orders scanned for admin lists/stats
 
@@ -49,6 +52,8 @@ function publicSummary(order, items) {
   };
 }
 
+export const publicSummaryOf = (order, items) => publicSummary(order, items);
+
 const background = (ctx, p) => {
   const safe = p.catch((e) => console.error('background task failed', e));
   if (ctx?.waitUntil) ctx.waitUntil(safe);
@@ -74,7 +79,7 @@ export function orderPhone(profile, typed, codesAvailable) {
 export async function createOrder(request, env, ctx) {
   const d = db(env);
   const { uid, profile } = await requireCustomer(request, env);
-  if (!(await rateLimit(env, `order:${clientIp(request)}`, ORDER_LIMIT_PER_HOUR, 3600))
+  if (!(await rateLimit(env, `order:${clientIp(request)}`, ORDER_IP_LIMIT_PER_HOUR, 3600))
     || !(await rateLimit(env, `order:u:${uid}`, ORDER_LIMIT_PER_HOUR, 3600))) {
     throw new HttpError(429, 'Too many orders from this device. Please try again later or WhatsApp us.');
   }
@@ -98,13 +103,14 @@ export async function createOrder(request, env, ctx) {
     throw new HttpError(422, 'Online payment is not available right now.');
   }
 
-  const priced = priceCart(input.items, { products: catalog.productsById, offers: catalog.offersById }, settings.shipping);
+  const shipRule = shippingRuleFor(settings.shipping, input.payment_method);
+  const priced = priceCart(input.items, { products: catalog.productsById, offers: catalog.offersById }, shipRule);
   if (!priced.ok) throw new HttpError(409, priced.errors[0], { errors: priced.errors });
 
   // Coupon: re-checked on the server; the browser's discount is never trusted.
   let coupon = null;
   if (input.coupon) {
-    const r = await evaluateCoupon(env, input.coupon, priced, { uid, phone, settings });
+    const r = await evaluateCoupon(env, input.coupon, priced, { uid, phone, settings: { ...settings, shipping: shipRule } });
     if (!r.ok) throw new HttpError(422, r.error, { fields: { coupon: r.error }, code: 'coupon_invalid' });
     coupon = r;
     priced.discount = r.discount;
@@ -161,6 +167,7 @@ export async function createOrder(request, env, ctx) {
     stock_held: Object.keys(stock).length ? stock : null,
     payment_method: input.payment_method, payment_status: 'pending',
     razorpay_order_id: rzpOrder?.id || null, razorpay_payment_id: null,
+    razorpay_order_ids: rzpOrder ? { [safeKey(rzpOrder.id)]: rzpOrder.id } : null,
     courier: null, tracking_no: null, tracking_url: null,
     idempotency_key: input.idempotency_key,
     items: priced.lines,
@@ -192,17 +199,81 @@ export async function createOrder(request, env, ctx) {
   return json(body, 201);
 }
 
+// ------------------------------------------------------------------ unpaid online orders
+// An online order takes its stock and coupon use when it is placed. If the customer never pays,
+// the scheduled job cancels it after UNPAID_HOLD_MIN minutes and gives both back.
+export const UNPAID_HOLD_MIN = 30;
+
+/** Give an order's held stock back exactly once (compare-and-set on stock_held). Returns what was released. */
+export async function releaseHeldStock(env, orderNo) {
+  const d = db(env);
+  for (let i = 0; i < 5; i++) {
+    const { value, etag } = await d.getWithEtag(`orders/${orderNo}/stock_held`);
+    if (!value) return null;
+    if (await d.putIfMatch(`orders/${orderNo}/stock_held`, null, etag)) { await releaseStock(env, value); return value; }
+  }
+  return null;
+}
+
+export async function expireUnpaidOrders(env, { now = Date.now(), minutes = UNPAID_HOLD_MIN, ctx = null } = {}) {
+  const d = db(env);
+  const cutoff = new Date(now - minutes * 60000).toISOString();
+  const since = new Date(now - 14 * 86400000).toISOString();
+  const map = (await d.get('orders', { orderBy: 'created_at', startAt: since, endAt: cutoff })) || {};
+  const out = { checked: 0, expired: [] };
+  for (const o of Object.values(map)) {
+    if (!o?.order_no || o.payment_method !== 'razorpay' || o.payment_status !== 'pending' || o.status !== 'placed') continue;
+    out.checked++;
+    if ((o.updated_at || o.created_at) > cutoff) continue; // a payment retry started recently
+    const no = o.order_no;
+    // Money may have left the customer's account even though the browser never reported back: ask Razorpay first.
+    const check = await reconcilePayment(env, ctx, no, 'system').catch((e) => ({ state: 'unknown', error: e?.message }));
+    if (check.paid) { out.paid = [...(out.paid || []), no]; continue; }
+    // Bank approved but not captured yet, or Razorpay unreachable: wait (up to 6 hours), then expire as usual.
+    // A payment that turns up later is still recorded and the order goes to "Refund: awaiting review".
+    if ((check.state === 'authorized' || check.state === 'unknown') && now - Date.parse(o.created_at) < 6 * 3600e3) continue;
+    // cancel exactly once, and never one that was just paid
+    const { value: status, etag } = await d.getWithEtag(`orders/${no}/status`);
+    if (status !== 'placed') continue;
+    if ((await d.get(`orders/${no}/payment_status`)) !== 'pending') continue;
+    if (!(await d.putIfMatch(`orders/${no}/status`, 'cancelled', etag))) continue;
+    const released = await releaseHeldStock(env, no);
+    if (o.coupon_code) await releaseCoupon(env, o.coupon_code, no).catch((e) => console.error('release coupon', e));
+    await d.patch(`orders/${no}`, {
+      expired_unpaid: true, stock_released: released || null, updated_at: nowIso(),
+      [`events/${pushKey()}`]: event('status', 'cancelled', `Online payment not completed within ${minutes} minutes. Stock released.`, 'system'),
+    });
+    out.expired.push(no);
+  }
+  return out;
+}
+
 /** Mark an online order paid exactly once (compare-and-set), then notify. */
-async function markPaid(env, ctx, orderNo, paymentId, actor) {
+export async function markPaid(env, ctx, orderNo, paymentId, actor, { amount, source } = {}) {
   const d = db(env);
   const { value, etag } = await d.getWithEtag(`orders/${orderNo}/payment_status`);
-  if (!value || value === 'paid') return false;
+  if (!value || value === 'paid' || value === 'refunded') return false;
   if (!(await d.putIfMatch(`orders/${orderNo}/payment_status`, 'paid', etag))) return false;
+  const total = await d.get(`orders/${orderNo}/total`);
+  const short = amount != null && Number(amount) !== Number(total);
   await d.patch(`orders/${orderNo}`, {
     razorpay_payment_id: paymentId, updated_at: nowIso(),
-    [`events/${pushKey()}`]: event('payment', null, `Paid online (${paymentId})`, actor),
+    ...(short ? { payment_attention: true } : {}),
+    [`events/${pushKey()}`]: event('payment', null, `Paid online (${paymentId})${source ? ` · found by ${source}` : ''}${short ? ` · amount ₹${amount} differs from the order total ₹${total}` : ''}`, actor),
   });
-  const fresh = await loadOrder(env, orderNo);
+  let fresh = await loadOrder(env, orderNo);
+  if (fresh.order.status === 'cancelled') {
+    // Paid after the order was cancelled. An order that only expired for being unpaid comes back if the stock is still there.
+    const need = fresh.order.stock_released;
+    const back = fresh.order.expired_unpaid && (!need || (await reserveStock(env, need)).ok);
+    await d.patch(`orders/${orderNo}`, back
+      ? { status: 'placed', stock_held: need || null, stock_released: null, expired_unpaid: null, updated_at: nowIso(),
+          [`events/${pushKey()}`]: event('status', 'placed', 'Payment arrived after the order had expired, so it was restored.', actor) }
+      : { payment_attention: true, updated_at: nowIso(), ...refundReviewFields(fresh.order, 'Paid after the order was cancelled'),
+          [`events/${pushKey()}`]: event('note', null, 'Paid after the order was cancelled. Refund awaiting review.', actor) });
+    fresh = await loadOrder(env, orderNo);
+    if (!back) { background(ctx, notifyOrderEvent(env, fresh.order, fresh.items, 'order_placed', { admin: true })); return true; }
+  }
   background(ctx, notifyOrderEvent(env, fresh.order, fresh.items, 'order_placed', { admin: true }));
   return true;
 }
@@ -223,7 +294,11 @@ export async function verifyPayment(request, env, ctx, orderNo) {
   return json({ order: publicSummary(fresh.order, fresh.items) });
 }
 
-async function ownedOrder(env, orderNo, phone) {
+async function ownedOrder(env, orderNo, phone, request = null) {
+  if (request && (!(await rateLimit(env, `payretry:${clientIp(request)}`, PAY_RETRY_LIMIT_PER_HOUR, 3600))
+    || !(await rateLimit(env, `payretry:o:${orderNo}`, 10, 3600)))) {
+    throw new HttpError(429, 'Too many attempts. Please try again later or WhatsApp us.');
+  }
   const found = await loadOrder(env, orderNo);
   if (!found || found.order.phone !== normalizePhone(phone)) throw new HttpError(404, 'Order not found. Check the order number and mobile number.');
   return found;
@@ -232,15 +307,26 @@ async function ownedOrder(env, orderNo, phone) {
 /** Start a fresh Razorpay attempt for an unpaid online order. */
 export async function retryPayment(request, env, ctx, orderNo) {
   const body = await readJson(request);
-  const { order } = await ownedOrder(env, orderNo, body.phone);
+  const { order } = await ownedOrder(env, orderNo, body.phone, request);
+  if (order.expired_unpaid && order.status === 'cancelled') throw new HttpError(409, `This order expired because payment wasn't completed within ${UNPAID_HOLD_MIN} minutes. Please place it again.`, { code: 'expired' });
   if (order.payment_method !== 'razorpay' || order.payment_status === 'paid' || order.status === 'cancelled') {
     throw new HttpError(409, 'This order does not need payment.');
   }
   const settings = await getSettings(env);
   if (!(settings.payments.razorpay && integrations(env).razorpay)) throw new HttpError(422, 'Online payment is not available right now.');
+  // Never charge twice: if an earlier attempt was paid after all, show the order as paid instead.
+  const check = await reconcilePayment(env, ctx, orderNo, 'customer').catch(() => ({ state: 'unknown' }));
+  if (check.paid) {
+    const fresh = await loadOrder(env, orderNo);
+    return json({ already_paid: true, order: publicSummary(fresh.order, fresh.items) });
+  }
+  if (check.state === 'authorized') {
+    throw new HttpError(409, 'Your bank has approved a payment for this order and it is being confirmed. Please wait a few minutes and press "Check payment" instead of paying again.', { code: 'payment_authorized' });
+  }
   const rzp = await createRazorpayOrder(env, { amount: order.total, receipt: order.order_no, notes: { order_no: order.order_no } });
   await db(env).patch('', {
     [`orders/${orderNo}/razorpay_order_id`]: rzp.id,
+    [`orders/${orderNo}/razorpay_order_ids/${safeKey(rzp.id)}`]: rzp.id,
     [`orders/${orderNo}/updated_at`]: nowIso(),
     [`order_index/rzp/${safeKey(rzp.id)}`]: orderNo,
   });
@@ -250,19 +336,54 @@ export async function retryPayment(request, env, ctx, orderNo) {
 /** Customer abandoned online payment and wants Cash on Delivery instead. */
 export async function switchToCod(request, env, ctx, orderNo) {
   const body = await readJson(request);
-  const { order } = await ownedOrder(env, orderNo, body.phone);
+  const { order } = await ownedOrder(env, orderNo, body.phone, request);
+  if (order.expired_unpaid && order.status === 'cancelled') throw new HttpError(409, `This order expired because payment wasn't completed within ${UNPAID_HOLD_MIN} minutes. Please place it again.`, { code: 'expired' });
   if (order.payment_method !== 'razorpay' || order.payment_status === 'paid' || order.status === 'cancelled') {
     throw new HttpError(409, 'This order cannot be changed.');
   }
   const settings = await getSettings(env);
   if (!settings.payments.cod) throw new HttpError(422, 'Cash on Delivery is not available right now.');
+  // free / cheaper prepaid delivery no longer applies: charge the Cash on Delivery fee
+  let shipping = order.shipping || 0;
+  const couponType = order.coupon_code ? (await db(env).get(`coupons/${order.coupon_code}/type`)) : null;
+  if (couponType !== 'free_shipping') shipping = shippingFor((order.subtotal || 0) - (order.discount || 0), settings.shipping);
+  const total = (order.total || 0) - (order.shipping || 0) + shipping;
   await db(env).patch(`orders/${orderNo}`, {
-    payment_method: 'cod', payment_status: 'pending', updated_at: nowIso(),
-    [`events/${pushKey()}`]: event('payment', null, 'Switched to Cash on Delivery', 'customer'),
+    payment_method: 'cod', payment_status: 'pending', shipping, total, updated_at: nowIso(),
+    [`events/${pushKey()}`]: event('payment', null, 'Switched to Cash on Delivery' + (shipping !== (order.shipping || 0) ? ` · delivery ${shipping ? '₹' + shipping : 'free'}` : ''), 'customer'),
   });
   const fresh = await loadOrder(env, orderNo);
   background(ctx, notifyOrderEvent(env, fresh.order, fresh.items, 'order_placed', { admin: true }));
   return json({ order: publicSummary(fresh.order, fresh.items) });
+}
+
+/** Signed-in customer cancels their own order. Only before it ships. */
+export const CUSTOMER_CANCELLABLE = ['placed', 'confirmed', 'packed'];
+export async function customerCancelOrder(request, env, ctx, orderNo) {
+  const { uid } = await requireCustomer(request, env);
+  const body = await readJson(request).catch(() => ({}));
+  const d = db(env);
+  const found = await loadOrder(env, orderNo);
+  if (!found || found.order.uid !== uid) throw new HttpError(404, 'Order not found.');
+  const { order } = found;
+  if (order.status === 'cancelled') throw new HttpError(409, 'This order is already cancelled.');
+  if (!CUSTOMER_CANCELLABLE.includes(order.status)) throw new HttpError(409, 'This order has already shipped, so it can no longer be cancelled.', { code: 'shipped' });
+  // cancel exactly once, and only if it hasn't moved on meanwhile
+  const { value: status, etag } = await d.getWithEtag(`orders/${orderNo}/status`);
+  if (!CUSTOMER_CANCELLABLE.includes(status) || !(await d.putIfMatch(`orders/${orderNo}/status`, 'cancelled', etag))) {
+    throw new HttpError(409, 'This order has already shipped, so it can no longer be cancelled.', { code: 'shipped' });
+  }
+  if (order.stock_held) await releaseHeldStock(env, orderNo).catch((e) => console.error('release stock', e));
+  if (order.coupon_code) await releaseCoupon(env, order.coupon_code, orderNo).catch((e) => console.error('release coupon', e));
+  const paid = order.payment_status === 'paid';
+  const reason = str(body.reason, 300);
+  await d.patch(`orders/${orderNo}`, {
+    cancelled_by: 'customer', updated_at: nowIso(), ...(paid ? { refund_due: true, payment_attention: true, ...refundReviewFields(order, 'Cancelled by the customer') } : {}),
+    [`events/${pushKey()}`]: event('status', 'cancelled', ['Cancelled by the customer', reason, paid ? 'Paid online: refund awaiting review' : ''].filter(Boolean).join(' · '), 'customer'),
+  });
+  const fresh = await loadOrder(env, orderNo);
+  background(ctx, notifyOrderEvent(env, fresh.order, fresh.items, 'cancelled', { admin: true }));
+  return json({ order: publicSummary(fresh.order, fresh.items), refund_due: paid });
 }
 
 export async function razorpayWebhook(request, env, ctx) {
@@ -271,6 +392,10 @@ export async function razorpayWebhook(request, env, ctx) {
   if (!ok) throw new HttpError(401, 'Invalid signature');
   let evt;
   try { evt = JSON.parse(raw); } catch { throw new HttpError(400, 'Invalid JSON'); }
+  if (/^refund\./.test(evt.event || '')) {
+    await refundWebhook(env, evt);
+    return json({ ok: true });
+  }
   if (evt.event === 'payment.captured' || evt.event === 'order.paid') {
     const pay = evt.payload?.payment?.entity;
     const rzpOrderId = pay?.order_id || evt.payload?.order?.entity?.id;
@@ -312,6 +437,26 @@ async function recentOrders(env, sinceIso) {
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
 
+/**
+ * Orders the admin list should look at. Normally the newest ADMIN_SCAN_LIMIT; with a "from" date, every order since
+ * that day; and an exact order number or 10-digit phone is looked up directly, however old the order is.
+ */
+async function adminScope(env, p) {
+  const f = String(p('from') || '').slice(0, 10);
+  const since = /^\d{4}-\d{2}-\d{2}$/.test(f) ? new Date(Date.parse(f + 'T00:00:00+05:30')).toISOString() : null;
+  const rows = await recentOrders(env, since);
+  const q = String(p('q') || '').trim().toUpperCase(), digits = q.replace(/\D/g, '');
+  let extra = [];
+  if (/^GM-\d{6}-\d{4}$/.test(q)) extra = [q];
+  else if (digits.length === 10 || (digits.length === 12 && digits.startsWith('91'))) {
+    extra = Object.keys((await db(env).get(`order_index/phone/${digits.slice(-10)}`, { shallow: true })) || {});
+  }
+  const have = new Set(rows.map((o) => o.order_no));
+  const more = await Promise.all(extra.filter((no) => !have.has(no)).slice(0, 50).map((no) => db(env).get(`orders/${no}`)));
+  for (const o of more) if (o && o.order_no) { const { events, items, ...r } = o; rows.push({ ...r, item_count: values(items).length, items: values(items) }); }
+  return rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+}
+
 /** Apply the admin list filters (status, payment, q, from, to) — shared by the list and the CSV export. */
 function filterOrders(rows, p) {
   const status = p('status');
@@ -325,15 +470,18 @@ function filterOrders(rows, p) {
       || String(o.email || '').toLowerCase().includes(q) || (digits.length >= 4 && String(o.phone).includes(digits)));
   }
   // Dates are IST calendar days.
-  if (p('from') && !Number.isNaN(Date.parse(p('from')))) { const f = new Date(Date.parse(p('from') + 'T00:00:00+05:30')).toISOString(); rows = rows.filter((o) => o.created_at >= f); }
-  if (p('to') && !Number.isNaN(Date.parse(p('to')))) { const t = new Date(Date.parse(p('to') + 'T00:00:00+05:30') + 86400000).toISOString(); rows = rows.filter((o) => o.created_at < t); }
+  // Only the YYYY-MM-DD part is used, so a value with a time can't turn into an invalid date (500).
+  const day = (k) => { const v = String(p(k) || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + 'T00:00:00+05:30')) ? Date.parse(v + 'T00:00:00+05:30') : null; };
+  const from = day('from'), to = day('to');
+  if (from != null) { const f = new Date(from).toISOString(); rows = rows.filter((o) => o.created_at >= f); }
+  if (to != null) { const t = new Date(to + 86400000).toISOString(); rows = rows.filter((o) => o.created_at < t); }
   return rows;
 }
 
 export async function adminListOrders(request, env) {
   const url = new URL(request.url);
   const p = (k) => url.searchParams.get(k) || '';
-  const rows = filterOrders(await recentOrders(env), p);
+  const rows = filterOrders(await adminScope(env, p), p);
 
   const page = Math.max(1, Math.floor(Number(p('page')) || 1));
   const size = 20;
@@ -371,7 +519,8 @@ export async function adminUpdateOrder(request, env, ctx, orderNo, admin) {
       throw new HttpError(409, `This order is already ${STATUS_LABELS[order.status] || order.status}. It can't be moved back to ${STATUS_LABELS[body.status] || body.status}.`, { fields: { status: 'Pick the current or a later step.' } });
     }
     patch.status = body.status;
-    events.push(event('status', body.status, str(body.note, 500), admin.email));
+    if (body.status === 'cancelled') Object.assign(patch, refundReviewFields(order, 'Cancelled by the store'));
+    events.push(event('status', body.status, [str(body.note, 500), patch.refund ? 'Paid online: refund awaiting review' : ''].filter(Boolean).join(' · ') || null, admin.email));
   } else if (str(body.note, 500)) {
     events.push(event('note', null, str(body.note, 500), admin.email));
   }
@@ -401,10 +550,7 @@ export async function adminUpdateOrder(request, env, ctx, orderNo, admin) {
   events.forEach((e, i) => { patch[`events/${pushKey(base + i)}`] = e; });
   await db(env).patch(`orders/${orderNo}`, patch);
   if (patch.status === 'cancelled' && order.coupon_code) await releaseCoupon(env, order.coupon_code, orderNo).catch((e) => console.error('release coupon', e));
-  if (patch.status === 'cancelled' && order.stock_held) {
-    await releaseStock(env, order.stock_held).catch((e) => console.error('release stock', e));
-    await db(env).patch(`orders/${orderNo}`, { stock_held: null });
-  }
+  if (patch.status === 'cancelled' && order.stock_held) await releaseHeldStock(env, orderNo).catch((e) => console.error('release stock', e));
 
   const notify = body.notify || {};
   let sent = [];
@@ -465,10 +611,11 @@ export async function checkCoupon(request, env) {
   const { uid, profile } = await requireCustomer(request, env);
   const body = await readJson(request);
   const [settings, catalog] = await Promise.all([getSettings(env), loadCatalog(env)]);
-  const priced = priceCart(body.items, { products: catalog.productsById, offers: catalog.offersById }, settings.shipping);
+  const shipRule = shippingRuleFor(settings.shipping, body.payment_method === 'razorpay' ? 'razorpay' : 'cod');
+  const priced = priceCart(body.items, { products: catalog.productsById, offers: catalog.offersById }, shipRule);
   if (!priced.ok) throw new HttpError(409, priced.errors[0]);
   const phone = profile.phone_verified ? profile.phone : normalizePhone(body.phone);
-  const r = await evaluateCoupon(env, body.code, priced, { uid, phone, settings });
+  const r = await evaluateCoupon(env, body.code, priced, { uid, phone, settings: { ...settings, shipping: shipRule } });
   if (!r.ok) throw new HttpError(422, r.error, { code: 'coupon_invalid' });
   return json({ coupon: { code: r.code, discount: r.discount, shipping: r.shipping, total: r.total, message: r.message, summary: r.summary } });
 }
@@ -487,7 +634,7 @@ const istDate = (iso) => new Date(Date.parse(iso) + 330 * 60000).toISOString().r
 export async function adminExportOrders(request, env) {
   const url = new URL(request.url);
   const p = (k) => url.searchParams.get(k) || '';
-  const rows = filterOrders(await recentOrders(env), p);
+  const rows = filterOrders(await adminScope(env, p), p);
   const head = ['Order no', 'Date (IST)', 'Status', 'Customer', 'Mobile', 'Email', 'Address', 'City', 'State', 'Pincode', 'Items', 'Item count',
     'Subtotal', 'Coupon', 'Discount', 'Shipping', 'Total', 'Payment method', 'Payment status', 'Courier', 'Tracking no', 'Invoice no', 'Customer note'];
   const lines = [head.map(csvCell).join(',')];

@@ -519,3 +519,17 @@ a.item-row small{display:block;color:var(--muted);font-size:.76rem;margin-top:2p
 .bk-row .mono{flex:1}
 
 .msg-act{display:inline-flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+
+.p-card .vis .offer-pics{display:grid;width:100%;height:100%;gap:2px}
+.p-card .vis .offer-pics.n2{grid-template-columns:1fr 1fr}
+.p-card .vis .offer-pics.n3{grid-template-columns:1fr 1fr 1fr}
+.p-card .vis .offer-pics img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* online refund panel on the order page */
+.refund-box{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0 4px;background:#fff;display:grid;gap:6px}
+.refund-box>b{font-size:.92rem}
+.refund-box p{font-size:.84rem;margin:0;line-height:1.5}
+.refund-box .form{gap:10px;margin-top:4px}
+.refund-box.review,.refund-box.failed{border-color:#e9b8a5;background:#fdf3ee}
+.refund-box.processing{border-color:#efd9a2;background:#fff8e7}
+.refund-box.processed{border-color:#bfe0c8;background:#eef7f0}
