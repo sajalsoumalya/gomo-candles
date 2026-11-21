@@ -43,8 +43,11 @@
       // keep the scene's focal point (0..1 across the photo) in view on narrow screens
       const f = +(s.el.dataset.focus || .5);
       const maxShift = (w - vw) / 2;
-      const shift = clamp((.5 - f) * w, -maxShift, maxShift);
+      s.maxShift = maxShift;
+      s.focusShift = (fx) => clamp((.5 - fx) * w, -maxShift, maxShift);
+      const shift = s.focusShift(f);
       s.frame.style.left = `calc(50% + ${shift.toFixed(1)}px)`;
+      if (s.apply && s.pan) s.apply(s);
     });
   }
 
@@ -300,14 +303,21 @@
     mist.pumps = [.14, .27, .40];
     mist.fired = [false, false, false];
     mist.spray = 0;
+    mist.pan = true;
     mist.apply = s => {
       const blur = (1 - range(s.p, 0, .12)) * 6;
       const night = range(s.p, .62, 1);
       s.photo.style.filter = `blur(${blur.toFixed(2)}px) brightness(${(1 - night * .32).toFixed(3)}) saturate(${(1 - night * .15).toFixed(3)}) hue-rotate(${(-night * 8).toFixed(1)}deg)`;
       s.haze.style.opacity = (range(s.p, .15, .55) * .9).toFixed(3);
-      s.frame.style.setProperty('--zoom', (1.04 + range(s.p, 0, 1) * .1).toFixed(4));
+      // Narrow (phone) screens can't show bottle and pillow at once: the camera follows the mist from one to the other.
+      const narrow = s.fw && s.fw > innerWidth * 1.25;
+      s.frame.style.setProperty('--zoom', (narrow ? 1 + range(s.p, .6, 1) * .04 : 1.04 + range(s.p, 0, 1) * .1).toFixed(4));
+      if (narrow && s.focusShift) {
+        const fx = .24 + ease(range(s.p, .1, .55)) * (.8 - .24);
+        s.frame.style.left = `calc(50% + ${s.focusShift(fx).toFixed(1)}px)`;
+      }
       s.pumps.forEach((pp, i) => {
-        if (s.p >= pp && !s.fired[i]) { s.fired[i] = true; s.spray = .45; s.kick = 1; s.wet = Math.min(1, (s.wet || 0) + .34); }
+        if (s.p >= pp && !s.fired[i]) { s.fired[i] = true; s.spray = .45; s.wet = Math.min(1, (s.wet || 0) + .34); }
         if (s.p < pp - .02) s.fired[i] = false;
       });
     };
@@ -329,10 +339,6 @@
             r: fog ? rand(20, 50) : bokeh ? rand(6, 16) : rand(.5, 1.7), fog, bokeh, ph: rand(0, 6.28) });
         }
       }
-      // tiny camera kick on each pump, like a handheld shot
-      s.kick = Math.max(0, (s.kick || 0) - dt * 3.5);
-      const kx = Math.sin(t * 40) * s.kick * 2.5, ky = Math.cos(t * 33) * s.kick * 1.8;
-      s.frame.style.translate = `${kx.toFixed(2)}px ${ky.toFixed(2)}px`;
       // the pillow absorbs the mist: a soft lavender bloom where it lands
       if (s.wet) {
         const bx = .74 * w, by = .6 * h, R = w * (.18 + s.wet * .2);
@@ -503,7 +509,7 @@
       }
       s.tick && s.tick(s, dt, t);
       if (s.live) {
-        const k = s.type === 'wardrobe' ? [s.gust || 0, 0] : s.type === 'candle' ? [s.light || 0, ((s.flick || .9) - .9) * 4] : [s.kick || 0, s.wet || 0];
+        const k = s.type === 'wardrobe' ? [s.gust || 0, 0] : s.type === 'candle' ? [s.light || 0, ((s.flick || .9) - .9) * 4] : [0, s.wet || 0];
         s.live.render(t, par.x, par.y, k);
       }
     });
