@@ -1,0 +1,17 @@
+{
+  "name": "gomo-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "GoMo Candles API \u2014 Cloudflare Worker backed by Firebase Realtime Database",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "node scripts/deploy.mjs",
+    "test": "vitest run",
+    "deploy:code": "wrangler deploy"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.7",
+    "wrangler": "^4.160.0"
+  }
+}

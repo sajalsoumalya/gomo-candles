@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "shop",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/serve.mjs", "5500"],
+      "port": 5500,
+      "autoPort": false
+    },
+    {
+      "name": "shop-alt",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/serve.mjs", "5510"],
+      "port": 5510,
+      "autoPort": false
+    }
+  ]
+}

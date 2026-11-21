@@ -1,0 +1,27 @@
+{
+  "name": "GoMo Candles",
+  "short_name": "GoMo",
+  "description": "Evil Eye candles, charms and linen mist — aromatherapy and protection, handcrafted in Kolkata.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3e7d9",
+  "theme_color": "#1d1915",
+  "icons": [
+    {
+      "src": "/assets/brand/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/brand/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/brand/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

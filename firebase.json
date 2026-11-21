@@ -1,11 +1,23 @@
 {
+  "database": {
+    "rules": "database.rules.json"
+  },
   "hosting": {
+    "site": "gomocandle",
     "public": ".",
     "ignore": [
       "firebase.json",
       ".firebaserc",
-      ".git*",
-      "node_modules/**"
+      "**/.*",
+      "**/.*/**",
+      "**/node_modules/**",
+      "admin/**",
+      "worker/**",
+      "tools/**",
+      "assets/images/**",
+      "database.rules.json",
+      "**/*.md",
+      "backups/**"
     ],
     "rewrites": [
       {
@@ -15,16 +27,52 @@
     ],
     "headers": [
       {
-        "source": "**/*.html",
+        "source": "/@(robots.txt|sitemap.xml)",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache" }
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=3600"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(html|js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "regex": "^/[^.]*$",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "assets/@(img|brand|social)/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=604800"
+          }
         ]
       },
       {
         "source": "**",
         "headers": [
-          { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
-          { "key": "X-Content-Type-Options", "value": "nosniff" }
+          {
+            "key": "X-Frame-Options",
+            "value": "SAMEORIGIN"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          }
         ]
       }
     ]

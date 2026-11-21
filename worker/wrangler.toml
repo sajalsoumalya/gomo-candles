@@ -1,0 +1,37 @@
+name = "gomo-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+# Media cleanup: expired / unsaved uploads, removed or replaced photos, stray multipart uploads, orphan sweep.
+[triggers]
+crons = ["*/30 * * * *"]
+
+[vars]
+# Firebase Realtime Database URL (project gomocandle). No trailing slash.
+RTDB_URL = "https://gomocandle-default-rtdb.firebaseio.com"
+# Sites allowed to call the API from a browser (shop + admin). Local URLs are for development.
+ALLOWED_ORIGINS = "https://gomo.earthenbeauty.in,https://gomoadmin.web.app,https://gomoadmin.firebaseapp.com,https://gomocandle.web.app,https://gomocandle.firebaseapp.com,http://localhost:8765,http://localhost:8766,http://localhost:5500,http://127.0.0.1:5500"
+# Firebase project used by the admin panel for sign-in (must match admin/js/firebase-config.js).
+FIREBASE_PROJECT_ID = "gomocandle"
+# Comma-separated emails allowed into the admin panel (must also be verified in Firebase).
+ADMIN_EMAILS = "soumalya9862@gmail.com"
+# Public shop URL, used for "Track your order" links in messages (no trailing slash).
+SHOP_URL = "https://gomo.earthenbeauty.in"
+# OpenWA session to send from (its name in the OpenWA dashboard). Leave empty to use the first connected one.
+OPENWA_SESSION = "opt-connection"
+# S3-compatible photo storage (RustFS). Region is usually us-east-1 for RustFS / MinIO.
+S3_REGION = "us-east-1"
+# Contact shown to OpenStreetMap Nominatim in the User-Agent (their usage policy asks for one).
+GEO_CONTACT_EMAIL = "soumalya9862@gmail.com"
+
+# Secrets (never commit these) — put them in worker/.secrets (see .secrets.example) and run `npm run deploy`:
+#   FIREBASE_SERVICE_ACCOUNT  (contents of the service-account JSON key; required)
+#   OTP_SECRET                (random 32+ chars; required for sign-in codes)
+#   SMS_API_KEY               (bulk SMS provider key; optional)
+#   TURNSTILE_SECRET          (Cloudflare Turnstile secret; optional)
+#   S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_PUBLIC_URL (optional)  (RustFS photo storage)
+#   POSTAL_URL, POSTAL_API_KEY, MAIL_FROM, MAIL_REPLY_TO (optional)
+#   OPENWA_URL, OPENWA_API_KEY
+#   RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET
+# For local dev put them in worker/.dev.vars (see .dev.vars.example).

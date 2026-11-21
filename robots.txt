@@ -1,0 +1,6 @@
+# GoMo Candles — https://gomo.earthenbeauty.in
+User-agent: *
+Allow: /
+Disallow: /account
+
+Sitemap: https://gomo.earthenbeauty.in/sitemap.xml

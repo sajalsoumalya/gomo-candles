@@ -1,0 +1,27 @@
+# Secrets
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.secrets
+.secrets.*
+!.secrets.example
+.env
+.env.*
+*service-account*.json
+
+# Dependencies and build/tool state
+node_modules/
+.wrangler/
+.firebase/
+*.cache
+
+# Local backups and editor/OS files
+.catalog-backup-*.json
+.DS_Store
+.vscode/
+.snowflake/
+.remember/
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,11 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "orders": { ".indexOn": ["created_at"] },
+    "notifications": { ".indexOn": ["created_at", "order_no", "status"] },
+    "users": { ".indexOn": ["created_at", "phone", "email"] },
+    "media": { ".indexOn": ["product_id", "status", "created_at"] },
+    "audit": { ".indexOn": ["uid", "at"] }
+  }
+}
