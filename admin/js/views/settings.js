@@ -231,8 +231,8 @@ async function invoicePanel(p, s, save) {
     </div>
     <div class="field" data-field="address"><label for="ia">Business address</label><textarea id="ia" rows="2" maxlength="300">${esc(iv.address)}</textarea><div class="hint">Printed on every invoice. Required with a GSTIN.</div></div>
     <div class="form-row">
-      <div class="field" data-field="hsn"><label for="ih">HSN code</label><input id="ih" value="${esc(iv.hsn)}" maxlength="8" inputmode="numeric"><div class="hint">3406 = candles.</div></div>
-      <div class="field" data-field="gst_rate"><label for="ir">GST rate (%)</label><input id="ir" type="number" min="0" max="40" step="0.01" value="${esc(iv.gst_rate)}"><div class="hint">Please confirm the rate with your CA.</div></div>
+      <div class="field" data-field="hsn"><label for="ih">Default HSN code</label><input id="ih" value="${esc(iv.hsn)}" maxlength="8" inputmode="numeric"><div class="hint">Used for products with no HSN of their own (Products → edit → GST).</div></div>
+      <div class="field" data-field="gst_rate"><label for="ir">Default GST rate (%)</label><input id="ir" type="number" min="0" max="40" step="0.01" value="${esc(iv.gst_rate)}"><div class="hint">Please confirm the rate with your CA.</div></div>
       <div class="field" data-field="prefix"><label for="ip">Number prefix</label><input id="ip" value="${esc(iv.prefix)}" maxlength="8" style="text-transform:uppercase"><div class="hint">e.g. ${esc(iv.prefix || 'GM')}/26-27/0001, restarting each April.</div></div>
     </div>
     <div><button class="btn btn-primary" type="submit">Save invoice settings</button></div></form>`;

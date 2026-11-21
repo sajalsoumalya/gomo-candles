@@ -5,6 +5,7 @@ import { prepare, upload, discard, mediaUrl, pendingUploads, forgetPending, ACCE
 let products = [];
 
 export async function render(el, ctx) {
+  api('/api/admin/settings').then((d) => { window.GOMO_GST_DEFAULT = { hsn: d.settings.invoice?.hsn, rate: d.settings.invoice?.gst_rate }; }).catch(() => {});
   el.innerHTML = loading('Loading products…');
   const d = await api('/api/admin/products');
   if (!ctx.isCurrent()) return;
@@ -42,6 +43,7 @@ function card(p) {
       <b>${esc(p.name)}</b>
       <small>${esc(p.category)}${p.tag ? ' · ' + esc(p.tag) : ''}</small>
       <div class="price">${p.orderable && p.price > 0 ? inr(p.price) + (p.mrp > p.price ? ` <s class="muted" style="font-size:.8rem;font-weight:500">${inr(p.mrp)}</s>` : '') : '<span class="muted" style="font-size:1rem">Enquiry only</span>'}</div>
+      ${p.hsn || p.gst_rate != null ? `<small class="muted">HSN ${esc(p.hsn || 'default')} · GST ${p.gst_rate != null ? esc(p.gst_rate) + '%' : 'default'}</small>` : ''}
       ${p.stock != null ? `<small class="${p.stock === 0 ? 'stock-out' : p.stock <= (p.low_stock_at ?? 5) ? 'stock-low' : 'muted'}">${p.stock === 0 ? 'Sold out — 0 left' : `${p.stock} in stock${p.stock <= (p.low_stock_at ?? 5) ? ' · running low' : ''}`}</small>` : ''}
       ${p.used_in_offers.length ? `<small>In: ${esc(p.used_in_offers.join(', '))}</small>` : ''}
       ${cover ? '' : '<small class="muted">No photo yet — the illustration is shown</small>'}
@@ -270,6 +272,14 @@ function editDialog(p, el, { focusPhotos = false } = {}) {
       </section>
 
       <section class="pe-sec">
+        <div class="pe-h"><h4>GST</h4><span>Used on tax invoices · leave empty for the store default</span></div>
+        <div class="form-row">
+          <div class="field" data-field="hsn"><label for="phsn">HSN code</label><input id="phsn" value="${esc(v.hsn || '')}" maxlength="8" inputmode="numeric" placeholder="${esc(window.GOMO_GST_DEFAULT?.hsn || '3406')} (default)"><div class="hint">e.g. 3406 candles · 3307 room sprays &amp; fresheners</div></div>
+          <div class="field" data-field="gst_rate"><label for="pgst">GST rate</label><div class="pe-money"><input id="pgst" type="number" min="0" max="40" step="0.01" value="${v.gst_rate == null ? '' : esc(v.gst_rate)}" inputmode="decimal" placeholder="${esc(window.GOMO_GST_DEFAULT?.rate ?? 5)} (default)" style="border-radius:12px 0 0 12px!important"><span style="border-radius:0 12px 12px 0;border-left:0;border-right:1.5px solid var(--line)">%</span></div><div class="hint">Prices stay GST-inclusive; tax is worked out from them. Check rates with your CA.</div></div>
+        </div>
+      </section>
+
+      <section class="pe-sec">
         <div class="pe-h"><h4>Description</h4></div>
         <div class="field" data-field="description"><label for="pd">About this product</label><textarea id="pd" maxlength="1000" rows="3">${esc(v.description)}</textarea></div>
         <div class="field" data-field="chips"><label for="pk">Highlights <i>(comma separated, up to 6)</i></label><input id="pk" value="${esc((v.chips || []).join(', '))}" placeholder="Long Burn Time, Calming Scent"></div>
@@ -312,7 +322,7 @@ function editDialog(p, el, { focusPhotos = false } = {}) {
           category: f.querySelector('#pc').value, details: f.querySelector('#pdt').value,
           tag: f.querySelector('#pt').value, description: f.querySelector('#pd').value, chips: f.querySelector('#pk').value,
           art: f.querySelector('input[name="art"]:checked')?.value, sort: Number(f.querySelector('#ps').value || 0),
-          orderable: f.querySelector('#po').checked, in_stock: f.querySelector('#pi').checked, stock: f.querySelector('#pst').value === '' ? null : Number(f.querySelector('#pst').value), low_stock_at: Number(f.querySelector('#plo').value || 5), published: f.querySelector('#pv').checked,
+          orderable: f.querySelector('#po').checked, in_stock: f.querySelector('#pi').checked, stock: f.querySelector('#pst').value === '' ? null : Number(f.querySelector('#pst').value), low_stock_at: Number(f.querySelector('#plo').value || 5), hsn: f.querySelector('#phsn').value.trim(), gst_rate: f.querySelector('#pgst').value === '' ? null : Number(f.querySelector('#pgst').value), published: f.querySelector('#pv').checked,
         };
         if (photos) body.images = photos.payload();
         busy(btn, true);

@@ -34,23 +34,43 @@ export function splitTax(grossPaise, rate, intra) {
 export function computeInvoice(order, items, inv) {
   const tax = inv.mode === 'tax';
   const intra = tax && Boolean(inv.seller.state) && inv.seller.state.toLowerCase() === String(order.state || '').toLowerCase();
-  const rate = Number(inv.rate) || 0;
-  const rows = items.map((i) => ({ name: i.name, contents: i.contents ?? null, hsn: inv.hsn, qty: i.qty, unit_price: i.unit_price, gross: paise(i.line_total) }));
-  if (order.discount) rows.push({ name: `Discount${order.coupon_code ? ` (coupon ${order.coupon_code})` : ''}`, contents: null, hsn: inv.hsn, qty: 1, unit_price: -order.discount, gross: -paise(order.discount) });
-  if (order.shipping) rows.push({ name: 'Shipping charges', contents: null, hsn: '9965', qty: 1, unit_price: order.shipping, gross: paise(order.shipping) });
+  const defRate = Number(inv.rate) || 0;
+  const lineRate = (i) => (i.gst_rate != null && i.gst_rate !== '' ? Number(i.gst_rate) : defRate);
+  const rows = items.map((i) => ({ name: i.name, contents: i.contents ?? null, hsn: i.hsn || inv.hsn, rate: lineRate(i), qty: i.qty, unit_price: i.unit_price, gross: paise(i.line_total) }));
+
+  // Coupon discount: shown as one line, but its tax effect is shared across the items in proportion to their value,
+  // so items with different GST rates each carry the right share.
+  const disc = paise(order.discount || 0);
+  if (disc) {
+    const base = rows.reduce((s, r) => s + r.gross, 0) || 1;
+    let left = disc;
+    rows.forEach((r, k) => { const share = k === rows.length - 1 ? left : Math.round((disc * r.gross) / base); r.discShare = share; left -= share; });
+  }
+  if (order.shipping) rows.push({ name: 'Shipping charges', contents: null, hsn: '9965', rate: Math.max(0, ...rows.map((r) => r.rate)), qty: 1, unit_price: order.shipping, gross: paise(order.shipping) });
 
   const totals = { taxable: 0, cgst: 0, sgst: 0, igst: 0, tax: 0, gross: 0 };
-  const lines = rows.map((r) => {
-    const t = tax ? splitTax(r.gross, rate, intra) : { taxable: r.gross, cgst: 0, sgst: 0, igst: 0, tax: 0 };
+  const byRate = {};
+  const calc = (gross, rate) => (tax ? splitTax(gross, rate, intra) : { taxable: gross, cgst: 0, sgst: 0, igst: 0, tax: 0 });
+  const add = (t, gross, rate) => {
     for (const k of ['taxable', 'cgst', 'sgst', 'igst', 'tax']) totals[k] += t[k];
-    totals.gross += r.gross;
-    return { name: r.name, contents: r.contents, hsn: r.hsn, qty: r.qty, unit_price: r.unit_price, amount: rupees(r.gross),
-      taxable: rupees(t.taxable), cgst: rupees(t.cgst), sgst: rupees(t.sgst), igst: rupees(t.igst) };
+    totals.gross += gross;
+    if (tax) { const b = (byRate[rate] ||= { rate, taxable: 0, tax: 0 }); b.taxable += t.taxable; b.tax += t.tax; }
+  };
+  const lines = rows.map((r) => {
+    const net = r.gross - (r.discShare || 0);
+    const t = calc(net, r.rate);
+    add(t, net, r.rate);
+    return { name: r.name, contents: r.contents, hsn: r.hsn, rate: tax ? r.rate : null, qty: r.qty, unit_price: r.unit_price, amount: rupees(r.gross),
+      discount: r.discShare ? rupees(r.discShare) : 0, taxable: rupees(t.taxable), cgst: rupees(t.cgst), sgst: rupees(t.sgst), igst: rupees(t.igst) };
   });
+  if (disc) lines.push({ name: `Discount${order.coupon_code ? ` (coupon ${order.coupon_code})` : ''}`, contents: 'Shared across the items above', hsn: '', rate: null, qty: 1,
+    unit_price: -rupees(disc), amount: -rupees(disc), discount: 0, taxable: 0, cgst: 0, sgst: 0, igst: 0, is_discount: true });
+  const rate = tax ? (Object.keys(byRate).length === 1 ? Number(Object.keys(byRate)[0]) : null) : 0;
 
   return {
     title: tax ? 'Tax Invoice' : 'Invoice',
     number: inv.number, issued_at: inv.issued_at, mode: inv.mode, rate, tax_type: tax ? (intra ? 'cgst_sgst' : 'igst') : null,
+    rate_summary: Object.values(byRate).sort((a, b) => a.rate - b.rate).map((b) => ({ rate: b.rate, taxable: rupees(b.taxable), tax: rupees(b.tax) })),
     seller: inv.seller,
     buyer: {
       name: order.customer_name, phone: order.phone, email: order.email || null,

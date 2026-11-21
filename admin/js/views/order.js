@@ -192,8 +192,10 @@ function printInvoice(v) {
   const tax = v.mode === 'tax';
   const intra = v.tax_type === 'cgst_sgst';
   const s = v.seller, b = v.buyer, t = v.totals;
-  const taxCols = !tax ? '' : intra ? `<th>CGST ${v.rate / 2}%</th><th>SGST ${v.rate / 2}%</th>` : `<th>IGST ${v.rate}%</th>`;
-  const taxCells = (l) => (!tax ? '' : intra ? `<td class="r">${money(l.cgst)}</td><td class="r">${money(l.sgst)}</td>` : `<td class="r">${money(l.igst)}</td>`);
+  // Rates can differ per product, so the % is shown on each line, not in the header.
+  const taxCols = !tax ? '' : intra ? '<th>CGST</th><th>SGST</th>' : '<th>IGST</th>';
+  const pct = (r, half) => (r == null ? '' : `<br><small>${half ? r / 2 : r}%</small>`);
+  const taxCells = (l) => (!tax ? '' : l.is_discount ? (intra ? '<td></td><td></td>' : '<td></td>') : intra ? `<td class="r">${money(l.cgst)}${pct(l.rate, true)}</td><td class="r">${money(l.sgst)}${pct(l.rate, true)}</td>` : `<td class="r">${money(l.igst)}${pct(l.rate)}</td>`);
   const slip = document.getElementById('slip');
   slip.innerHTML = `<div class="inv">
     <div class="inv-head"><div><h1>${esc(v.title)}</h1>${v.cancelled ? '<p><b>CANCELLED</b></p>' : ''}</div>
@@ -203,9 +205,10 @@ function printInvoice(v) {
       <div><small>Bill / ship to</small><b>${esc(b.name)}</b><br>${esc(b.address)}<br>${esc(b.city)}, ${esc(b.state)} ${esc(b.pincode)}<br>+91 ${esc(b.phone)}${b.email ? `<br>${esc(b.email)}` : ''}${tax ? `<br>Place of supply: ${esc(b.state)}` : ''}</div>
     </div>
     <table><thead><tr><th>#</th><th>Item</th>${tax ? '<th>HSN/SAC</th>' : ''}<th>Qty</th><th>Rate</th>${tax ? '<th>Taxable</th>' : ''}${taxCols}<th>Amount</th></tr></thead>
-    <tbody>${v.lines.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.name)}${l.contents ? `<br><small>${esc(l.contents)}</small>` : ''}</td>${tax ? `<td>${esc(l.hsn)}</td>` : ''}<td>${l.qty}</td><td class="r">${money(l.unit_price)}</td>${tax ? `<td class="r">${money(l.taxable)}</td>` : ''}${taxCells(l)}<td class="r">${money(l.amount)}</td></tr>`).join('')}</tbody>
+    <tbody>${v.lines.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.name)}${l.contents ? `<br><small>${esc(l.contents)}</small>` : ''}</td>${tax ? `<td>${esc(l.hsn)}${l.rate != null ? `<br><small>GST ${l.rate}%</small>` : ''}</td>` : ''}<td>${l.qty}</td><td class="r">${money(l.unit_price)}</td>${tax ? `<td class="r">${l.is_discount ? '' : money(l.taxable)}</td>` : ''}${taxCells(l)}<td class="r">${money(l.amount)}</td></tr>`).join('')}</tbody>
     <tfoot>${tax ? `<tr><td colspan="${5}" class="r">Total taxable value</td><td class="r">${money(t.taxable)}</td>${intra ? `<td class="r">${money(t.cgst)}</td><td class="r">${money(t.sgst)}</td>` : `<td class="r">${money(t.igst)}</td>`}<td></td></tr>` : ''}
       <tr class="grand"><td colspan="${tax ? (intra ? 8 : 7) : 4}" class="r">Total${tax ? ' (incl. GST)' : ''}</td><td class="r">${money(t.gross)}</td></tr></tfoot></table>
+    ${tax && (v.rate_summary || []).length > 1 ? `<p><b>GST summary:</b> ${v.rate_summary.map((x) => `${x.rate}% on ${money(x.taxable)} = ${money(x.tax)}`).join(' · ')}</p>` : ''}
     <p>Payment: ${v.order.payment_method === 'cod' ? 'Cash on Delivery' : 'Online (Razorpay)'} · ${esc(v.order.payment_status === 'paid' ? 'Paid' : 'Due')}</p>
     ${tax ? '' : '<p class="muted">Prices are inclusive of all taxes.</p>'}
     <p class="muted">This is a computer-generated invoice and needs no signature.</p></div>`;

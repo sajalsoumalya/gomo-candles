@@ -16,6 +16,7 @@ const toProduct = (r) => ({
   details: values(r.details).filter((d) => d && d.value).map((d) => ({ label: d.label || '', value: d.value })), art: r.art || 'candle',
   images: toImages(r.images),
   // Tracked stock: sold out at 0 even if the switch is on.
+  hsn: r.hsn || null, gst_rate: r.gst_rate == null ? null : Number(r.gst_rate),
   stock: r.stock == null ? null : Number(r.stock), low_stock_at: r.low_stock_at == null ? 5 : Number(r.low_stock_at),
   in_stock: !!r.in_stock && (r.stock == null || Number(r.stock) > 0), in_stock_switch: !!r.in_stock, orderable: !!r.orderable, published: !!r.published, sort: Number(r.sort) || 0,
   created_at: r.created_at || null, updated_at: r.updated_at || null,
@@ -65,7 +66,7 @@ export async function getPublicCatalog(env) {
   const [cat, settings] = await Promise.all([loadCatalog(env), getSettings(env)]);
   const now = Date.now();
   // Shoppers see only "few left" when stock is low, never the exact count above that.
-  const products = cat.products.filter((p) => p.published).map(({ created_at, updated_at, published, stock, low_stock_at, in_stock_switch, ...p }) => ({
+  const products = cat.products.filter((p) => p.published).map(({ created_at, updated_at, published, stock, low_stock_at, in_stock_switch, hsn, gst_rate, ...p }) => ({
     ...p, few_left: stock != null && stock > 0 && stock <= low_stock_at ? stock : null,
   }));
   const offers = cat.offers

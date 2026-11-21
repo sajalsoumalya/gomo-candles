@@ -150,6 +150,17 @@ export function validateProductInput(body, { partial = false } = {}) {
   for (const k of ['in_stock', 'orderable', 'published']) if (has(k)) out[k] = flag(body[k]);
   // Stock quantity: empty / null = not tracked (only the In stock switch is used).
   if (has('stock')) out.stock = body.stock == null || body.stock === '' ? null : int(body.stock, { min: 0, max: 100000, field: 'stock', fields });
+  // GST per product (optional; empty = the store default in Settings → GST & invoices).
+  if (has('hsn')) {
+    const h = String(body.hsn ?? '').replace(/\s/g, '');
+    if (h && !/^\d{4,8}$/.test(h)) fields.hsn = 'HSN is 4 to 8 digits, e.g. 3406.';
+    out.hsn = h || null;
+  }
+  if (has('gst_rate')) {
+    const r = body.gst_rate === '' || body.gst_rate == null ? null : Number(body.gst_rate);
+    if (r != null && !(Number.isFinite(r) && r >= 0 && r <= 40 && Math.round(r * 100) === r * 100)) fields.gst_rate = 'A percentage from 0 to 40, e.g. 5, 12 or 18.';
+    out.gst_rate = r;
+  }
   if (has('low_stock_at')) out.low_stock_at = body.low_stock_at == null || body.low_stock_at === '' ? 5 : int(body.low_stock_at, { min: 0, max: 1000, field: 'low_stock_at', fields });
   if (has('sort')) out.sort = int(body.sort, { min: 0, max: 100000, field: 'sort', fields });
 

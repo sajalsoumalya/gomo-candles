@@ -18,6 +18,13 @@ export function offerCompareAt(offer, productsById) {
   }, 0);
 }
 
+export function offerTax(offer, productsById) {
+  const ps = (offer.items || []).map((it) => productsById[it.product_id]).filter(Boolean);
+  const main = ps.slice().sort((a, b) => (b.price || 0) - (a.price || 0))[0];
+  const rates = ps.map((p) => p.gst_rate).filter((r) => r != null);
+  return { hsn: main?.hsn || null, gst_rate: rates.length ? Math.max(...rates) : null };
+}
+
 export function offerContents(offer, productsById) {
   return (offer.items || []).map((it) => `${it.qty} × ${productsById[it.product_id]?.name || it.product_id}`).join(', ');
 }
@@ -70,6 +77,7 @@ export function priceCart(items, catalog, shippingRule, now = Date.now()) {
       lines.push({
         kind: 'product', ref_id: p.id, name: p.name, contents: null,
         unit_price: p.price, compare_unit_price: p.price, qty, line_total: p.price * qty,
+        hsn: p.hsn || null, gst_rate: p.gst_rate ?? null,
       });
     } else {
       const o = catalog.offers[id];
@@ -83,6 +91,8 @@ export function priceCart(items, catalog, shippingRule, now = Date.now()) {
       lines.push({
         kind: 'offer', ref_id: o.id, name: o.name, contents: offerContents(o, catalog.products),
         unit_price: o.price, compare_unit_price: compare, qty, line_total: o.price * qty,
+        // A combo is billed as one supply: HSN of its main (most expensive) product, highest GST rate among its products.
+        ...offerTax(o, catalog.products),
       });
     }
   }
