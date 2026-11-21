@@ -455,7 +455,7 @@ export async function adminStats(env) {
     cod_due: { n: cod.length, amount: sum(cod) },
     recent: orders.slice(0, 8).map(({ order_no, created_at, customer_name, total, status, payment_method, payment_status }) =>
       ({ order_no, created_at, customer_name, total, status, payment_method, payment_status })),
-    failed_notifications_7d: values(notes).filter((n) => n.status === 'failed').length,
+    failed_notifications_7d: values(notes).filter((n) => n.status === 'failed' && !n.dismissed_at).length,
   });
 }
 

@@ -12,7 +12,7 @@ import {
 } from './orders.js';
 import {
   adminGetSettings, adminPutSettings, adminTestNotification, adminListNotifications, adminRetryNotification,
-  adminTestOtp, adminListCustomers, adminGetCustomer, adminSetCustomerDisabled,
+  adminTestOtp, adminDismissNotifications, adminListCustomers, adminGetCustomer, adminSetCustomerDisabled,
 } from './admin.js';
 import {
   requireCustomer, otpLoginStart, otpLoginVerify, getAccount, updateAccount, phoneStart, phoneVerify,
@@ -104,6 +104,7 @@ const routes = [
   ['POST', '/api/admin/test-notification', ({ request, env }) => adminTestNotification(request, env), 'admin'],
   ['POST', '/api/admin/test-otp', ({ request, env, admin }) => adminTestOtp(request, env, admin), 'admin'],
   ['GET', '/api/admin/notifications', ({ request, env }) => adminListNotifications(request, env), 'admin'],
+  ['POST', '/api/admin/notifications/dismiss', ({ request, env, admin }) => adminDismissNotifications(request, env, admin), 'admin'],
   ['POST', `/api/admin/notifications/${MID}/retry`, ({ env, m }) => adminRetryNotification(env, m[1]), 'admin'],
   ['GET', '/api/admin/customers', ({ request, env }) => adminListCustomers(request, env), 'admin'],
   ['GET', `/api/admin/customers/${UID}`, ({ env, m }) => adminGetCustomer(env, m[1]), 'admin'],

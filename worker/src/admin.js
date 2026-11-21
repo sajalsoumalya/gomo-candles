@@ -66,9 +66,11 @@ export async function adminListNotifications(request, env) {
   const size = 30;
   const map = (await db(env).get('notifications', { orderBy: 'created_at', limitToLast: 1000 })) || {};
   let rows = Object.entries(map).map(([id, n]) => ({ id, created_at: n.created_at, order_no: n.order_no || null, event: n.event, channel: n.channel,
-    recipient: n.recipient, subject: n.subject || null, status: n.status, error: n.error || null, attempts: n.attempts || 1, retryable: n.retryable !== false }))
+    recipient: n.recipient, subject: n.subject || null, status: n.status, error: n.error || null, attempts: n.attempts || 1, retryable: n.retryable !== false,
+    dismissed: !!n.dismissed_at, is_code: String(n.event || '').startsWith('otp_') }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  if (['sent', 'failed', 'skipped'].includes(status)) rows = rows.filter((n) => n.status === status);
+  if (status === 'failed') rows = rows.filter((n) => n.status === 'failed' && !n.dismissed);
+  else if (['sent', 'skipped'].includes(status)) rows = rows.filter((n) => n.status === status);
   return json({ notifications: rows.slice((page - 1) * size, page * size), total: rows.length, page, page_size: size });
 }
 
@@ -82,6 +84,22 @@ export async function adminRetryNotification(env, id) {
     event: row.event, order_no: row.order_no, logId: id,
   });
   return json({ result });
+}
+
+/** Mark failed messages as dealt with, so they stop showing in the dashboard warning. ids = list, or 'all_failed'. */
+export async function adminDismissNotifications(request, env, admin) {
+  const body = await readJson(request);
+  const d = db(env);
+  let ids = Array.isArray(body.ids) ? body.ids.filter((x) => /^[a-z0-9]{10,24}$/.test(String(x))).slice(0, 500) : [];
+  if (body.all_failed) {
+    const map = (await d.get('notifications', { orderBy: 'created_at', limitToLast: 1000 })) || {};
+    ids = Object.entries(map).filter(([, n]) => n.status === 'failed' && !n.dismissed_at).map(([id]) => id);
+  }
+  const at = nowIso();
+  const up = {};
+  for (const id of ids) { up[`notifications/${id}/dismissed_at`] = at; up[`notifications/${id}/dismissed_by`] = admin?.email || null; }
+  if (ids.length) await d.patch('', up);
+  return json({ dismissed: ids.length });
 }
 
 // --------------------------------------------------------------------------- OTP test

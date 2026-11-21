@@ -517,3 +517,5 @@ a.item-row small{display:block;color:var(--muted);font-size:.76rem;margin-top:2p
 .bk-row{display:flex;align-items:center;gap:14px;padding:8px 14px;border-bottom:1px solid var(--line);font-size:.86rem}
 .bk-row:last-child{border-bottom:0}
 .bk-row .mono{flex:1}
+
+.msg-act{display:inline-flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}

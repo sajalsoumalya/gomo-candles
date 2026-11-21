@@ -12,7 +12,7 @@ export async function render(el, ctx) {
   el.innerHTML = `
     <div class="page-head"><div><h1>Dashboard</h1><p>${esc(new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }))}</p></div>
       <div class="actions"><a class="btn btn-line" href="#/offers/new?type=combo">${icon('plus')} New combo</a><a class="btn btn-primary" href="#/orders?status=placed">Review new orders ${icon('arrow')}</a></div></div>
-    ${s.failed_notifications_7d ? `<div class="alert warn">${s.failed_notifications_7d} message${s.failed_notifications_7d > 1 ? 's' : ''} failed to send in the last 7 days. <a href="#/notifications?status=failed"><b>Review &amp; retry</b></a></div>` : ''}
+    ${s.failed_notifications_7d ? `<div class="alert warn">${s.failed_notifications_7d} message${s.failed_notifications_7d > 1 ? 's' : ''} failed to send in the last 7 days. <a href="#/notifications?status=failed"><b>Review — retry or dismiss</b></a></div>` : ''}
     ${s.low_stock?.length ? `<div class="alert warn"><b>Low stock:</b> ${s.low_stock.map((p) => `${esc(p.name)} — ${p.stock === 0 ? '<b>sold out</b>' : `${p.stock} left`}`).join(' · ')}. <a href="#/products"><b>Update stock</b></a></div>` : ''}
     <div class="grid g-4">
       <a class="kpi accent" href="#/orders?status=placed"><small>Awaiting confirmation</small><b>${placed}</b><span>${placed ? 'Confirm and notify customers' : 'All caught up'}</span></a>
