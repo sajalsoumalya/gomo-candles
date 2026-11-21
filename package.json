@@ -1,0 +1,9 @@
+{
+  "name": "gomo-shop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build_og.mjs && node tools/build_sitemap.mjs",
+    "deploy:shop": "npm run build && firebase deploy --only hosting"
+  }
+}

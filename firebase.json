@@ -17,7 +17,8 @@
       "assets/images/**",
       "database.rules.json",
       "**/*.md",
-      "backups/**"
+      "backups/**",
+      "package.json"
     ],
     "rewrites": [
       {
@@ -26,6 +27,15 @@
       }
     ],
     "headers": [
+      {
+        "source": "assets/og/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=86400"
+          }
+        ]
+      },
       {
         "source": "/@(robots.txt|sitemap.xml)",
         "headers": [
@@ -75,6 +85,7 @@
           }
         ]
       }
-    ]
+    ],
+    "cleanUrls": true
   }
 }

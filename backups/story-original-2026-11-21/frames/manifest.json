@@ -1,0 +1,6 @@
+{
+  "count": 240,
+  "lg": "/story/frames/lg/{n}.webp",
+  "sm": "/story/frames/sm/{n}.webp",
+  "captions": [{"win":[0.025,0.052,0.155,0.190],"title":"Open the wardrobe","sub":"Evil Eye Sachet"},{"win":[0.230,0.255,0.353,0.386],"title":"Light the candle","sub":"Evil Eye Candle"},{"win":[0.425,0.451,0.548,0.582],"title":"Enjoy the evening","sub":"Dinner, music, a good book"},{"win":[0.621,0.646,0.744,0.777],"title":"Mist the pillow","sub":"Dutch Lavender Linen Mist"},{"win":[0.818,0.844,1.1,1.2],"title":"Sleep deeply","sub":"Wake lighter, calmer, ready"}]
+}
