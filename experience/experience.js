@@ -161,13 +161,13 @@
     // wick tops in frame-space (0..1) measured from the 800x689 photo
     candle.wicks = [{ x: .589, y: .487, on: 0 }, { x: .661, y: .501, on: 0 }];
     candle.apply = s => {
-      s.ign = [easeOut(range(s.p, .30, .38)), easeOut(range(s.p, .40, .48))];
-      const light = Math.max(s.ign[0], s.ign[1] * 1.0) * .55 + range(s.p, .4, .65) * .45;
+      s.ign = [easeOut(range(s.p, .22, .30)), easeOut(range(s.p, .32, .40))];
+      const light = Math.max(s.ign[0], s.ign[1] * 1.0) * .55 + range(s.p, .32, .58) * .45;
       s.light = light;
       s.masks.forEach((m, i) => { m.style.opacity = (1 - s.ign[i]).toFixed(3); });
       s.frame.style.setProperty('--zoom', (1.22 - ease(range(s.p, 0, .7)) * .2).toFixed(4));
       // match travel: comes in from the right, reaches wick 1 then wick 2
-      s.matchK = range(s.p, .14, .46);
+      s.matchK = range(s.p, .06, .38);
     };
     candle.tick = (s, dt, t) => {
       const { w, h } = fitCanvas(s.canvas);
@@ -183,7 +183,7 @@
       const matchLight = mk > 0 && mk < 1 ? Math.min(1, mk * 12, (1 - mk) * 6) * .22 : 0;
       const L = s.light * flick + matchLight * flick;
       s.flash = Math.max(0, (s.flash || 0) - dt * 4);
-      s.photo.style.filter = `brightness(${(.14 + L * .92 + s.flash * .5).toFixed(3)}) saturate(${(.6 + L * .5).toFixed(3)}) contrast(1.06) sepia(${((1 - L) * .2).toFixed(3)})`;
+      s.photo.style.filter = `brightness(${(.32 + L * .78 + s.flash * .5).toFixed(3)}) saturate(${(.6 + L * .5).toFixed(3)}) contrast(1.06) sepia(${((1 - L) * .2).toFixed(3)})`;
       s.warm.style.opacity = (Math.min(1, L + matchLight) * .95).toFixed(3);
       s.warm.style.translate = `${(Math.sin(t * 7) * 3).toFixed(1)}px ${(Math.sin(t * 5.3) * 2).toFixed(1)}px`;
 
@@ -439,10 +439,12 @@
       // Entering from above: start at the beginning and play forward (capped), so a fast flick doesn't skip the scene.
       // Jumping in from far away (e.g. reload mid-page) or from below: show the current point straight away.
       // lastY tells us the direction: coming down from above the scene → play from its start.
-      if (s.visible && !wasVisible) { s.p = (lastY < s.el.offsetTop && lastY !== null) ? 0 : s.target; s.apply(s); }
+      if (s.visible && !wasVisible) { s.p = s.target; s.apply(s); } // the page scroll is already calm, so join the scene where it is
       setCopies(s);
       if (s.visible) inScene = true;
-      s.el.querySelector('.stage').style.setProperty('--fade', (1 - clamp(Math.min(s.target * 16, (1 - s.target) * 10))).toFixed(3));
+      // Dark fade at the start/end of each scene (the "black screen" between scenes). Kept short: ~2% in, ~4% out.
+      // Hand-over between scenes: a light dim (not a black screen) while one scene scrolls away and the next comes in.
+      s.el.querySelector('.stage').style.setProperty('--fade', (0.4 * (1 - clamp(Math.min(s.target * 45, (1 - s.target) * 26)))).toFixed(3));
     });
     lastY = scrollY;
     // the story spans an evening: 6:30 PM at the wardrobe → 11:00 PM by the pillow

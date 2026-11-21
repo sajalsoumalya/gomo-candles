@@ -159,7 +159,8 @@
     catalog.offers.forEach(function (o) {
       o.items.forEach(function (it) {
         var p = prodById[it.product_id];
-        if (!(it.image && it.image.web) && hasPhoto(p)) it.image = p.images[0];
+        // a pack or combo item always shows its product's current main photo (Admin -> Products)
+        if (hasPhoto(p)) it.image = p.images[0];
       });
       offerById[o.id] = o;
     });
@@ -836,7 +837,32 @@
     renderShopPage();
     observeReveal();
     renderCart();
-    tickCountdowns();
+    tickCountdowns();    applyPagePhotos();
+  }
+
+  // Fixed images in index.html (hero, "Four steps") follow the admin photos too:
+  //   data-photo="<product id>" [data-n="<photo index>"]   data-offer-photo="<offer id>"   data-size="sm|md|lg"
+  function applyPagePhotos() {
+    Array.prototype.forEach.call(document.querySelectorAll('img[data-photo], img[data-offer-photo]'), function (el) {
+      var pid = el.getAttribute('data-photo'), list = null;
+      if (pid) { var p = prodById[pid]; if (hasPhoto(p)) list = p.images; }
+      else { var o = offerById[el.getAttribute('data-offer-photo')]; if (o && o.images && o.images.length && o.images[0].web) list = o.images; }
+      if (!list) return;
+      var img = list[Number(el.getAttribute('data-n')) || 0] || list[0];
+      if (!img || !img.web) return;
+      var size = el.getAttribute('data-size'), src;
+      if (size === 'lg') {
+        src = mediaUrl(img.web);
+        if (img.thumb) el.setAttribute('srcset', mediaUrl(img.thumb) + ' 800w, ' + src + ' ' + (img.w || 1600) + 'w'); else el.removeAttribute('srcset');
+      } else {
+        src = mediaUrl(size === 'sm' ? (img.sq_small || img.sq || img.thumb || img.web) : (img.sq || img.thumb || img.web));
+        el.removeAttribute('srcset');
+      }
+      if (el.getAttribute('src') !== src) el.setAttribute('src', src);
+      if (img.w && img.h) { el.setAttribute('width', img.w); el.setAttribute('height', img.h); }
+      el.classList.toggle('studio', !!img.studio);
+      if (el.hasAttribute('data-offer-photo')) el.classList.toggle('cutout', !!img.transparent);
+    });
   }
 
   // ------------------------------------------------------------------ reveal on scroll
