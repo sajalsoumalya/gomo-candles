@@ -25,9 +25,11 @@ export async function launch() {
   let id = 0;
   const pending = new Map();
   const logs = [];
+  const events = new Set(); // extra listeners for CDP events, e.g. Fetch.requestPaused in tests
   ws.addEventListener('message', (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
+    if (msg.method) events.forEach((fn) => fn(msg));
     if (msg.method === 'Runtime.exceptionThrown') logs.push('EXCEPTION ' + (msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text));
     if (msg.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(msg.params.type)) logs.push(msg.params.type.toUpperCase() + ' ' + msg.params.args.map((a) => a.value ?? a.description).join(' '));
     if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') logs.push('LOG ' + msg.params.entry.text + ' ' + (msg.params.entry.url || ''));
@@ -41,6 +43,7 @@ export async function launch() {
 
   return {
     logs,
+    on(fn) { events.add(fn); return () => events.delete(fn); },
     send,
     async viewport(width, height, mobile = false) {
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile });

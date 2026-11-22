@@ -8,6 +8,7 @@ import { db, values } from './db.js';
 import { startOtp, otpChannels } from './otp.js';
 import { publicProfile } from './account.js';
 import { authAdmin } from './google.js';
+import { spendByCustomer } from './orders.js';
 import { smsReady } from './sms.js';
 
 export async function adminGetSettings(env) {
@@ -149,12 +150,13 @@ export async function adminListCustomers(request, env) {
   if (['phone', 'password', 'google'].includes(p('via'))) rows = rows.filter((u) => u.created_via === p('via'));
   const page = Math.max(1, Math.floor(Number(p('page')) || 1));
   const size = 25;
-  const counts = await db(env).get('user_orders', { shallow: true }).catch(() => null);
+  const [counts, spend] = await Promise.all([db(env).get('user_orders', { shallow: true }).catch(() => null), spendByCustomer(env).catch(() => ({}))]);
   return json({
     customers: rows.slice((page - 1) * size, page * size).map((u) => ({
       uid: u.uid, name: u.name || '', email: u.email || null, email_verified: !!u.email_verified, phone: u.phone || null,
       phone_verified: !!u.phone_verified, whatsapp_status: u.whatsapp_status || 'unknown', created_via: u.created_via,
       created_at: u.created_at, last_login_at: u.last_login_at || null, disabled: !!u.disabled, has_orders: !!counts?.[u.uid],
+      orders: spend[u.uid]?.n || 0, spent: spend[u.uid]?.spent || 0, last_order_at: spend[u.uid]?.last_at || null,
     })),
     total: rows.length, page, page_size: size,
   });

@@ -31,7 +31,7 @@ import { runBackup, adminBackupStatus, adminDownloadBackup } from './backup.js';
 import { adminCheckIntegrations } from './health.js';
 import { adminUploadFile, adminListFiles, adminUpdateFile, adminDeleteFile } from './files.js';
 import { checkPayment, adminCheckPayment, adminProcessRefund, adminRefreshRefund, pollRefunds } from './refunds.js';
-import { adminBookShipment, adminSyncShipment, adminCancelShipment, adminListPickups, courierWebhook, pollShipments } from './shiprocket.js';
+import { adminBookShipment, adminPrepareBooking, adminSyncShipment, adminCancelShipment, adminListPickups, courierWebhook, pollShipments } from './shiprocket.js';
 
 const ORDER_NO = '(GM-\\d{6}-\\d{4})';
 const ID = '([a-z0-9-]{1,64})';
@@ -183,6 +183,7 @@ const routes = [
   ['POST', `/api/admin/orders/${ORDER_NO}/refund`, ({ request, env, m, admin }) => adminProcessRefund(request, env, m[1], admin), 'admin'],
   ['POST', `/api/admin/orders/${ORDER_NO}/refund/refresh`, ({ env, m, admin }) => adminRefreshRefund(env, m[1], admin), 'admin'],
   // Shiprocket: book the courier pickup from the order page
+  ['GET', `/api/admin/orders/${ORDER_NO}/shiprocket/prepare`, ({ env, m }) => adminPrepareBooking(env, m[1]), 'admin'],
   ['POST', `/api/admin/orders/${ORDER_NO}/shiprocket/book`, ({ request, env, m, admin }) => adminBookShipment(request, env, m[1], admin), 'admin'],
   ['POST', `/api/admin/orders/${ORDER_NO}/shiprocket/sync`, ({ env, m, admin }) => adminSyncShipment(env, m[1], admin), 'admin'],
   ['POST', `/api/admin/orders/${ORDER_NO}/shiprocket/cancel`, ({ env, m, admin }) => adminCancelShipment(env, m[1], admin), 'admin'],

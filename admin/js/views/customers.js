@@ -49,13 +49,14 @@ export async function render(el, ctx) {
   };
   el.querySelector('#q').addEventListener('input', debounce((e) => { filters.q = e.target.value.trim(); filters.page = 1; load(); }, 350));
   el.querySelector('#via').addEventListener('change', (e) => { filters.via = e.target.value; filters.page = 1; load(); });
-  load();
+  await load(); // resolve once the list is drawn (live refresh swaps in a finished page)
 }
 
 function custCard(c) {
   return `<a class="list-card cu-card" href="#/customers/${esc(c.uid)}"><span class="o-av" aria-hidden="true">${esc(initials(c.name || c.email || ''))}</span><span class="cu-body">
       <div class="top"><b>${esc(c.name || c.email || ('+91 ' + (c.phone || '')))}</b>${c.disabled ? '<span class="pill failed">Disabled</span>' : ''}</div>
       <div class="meta"><span>${c.phone ? '+91 ' + esc(c.phone) : 'No mobile'}${c.email ? ' · ' + esc(c.email) : ''}</span></div>
+      ${c.orders ? `<div class="cu-spend"><b>${inr(c.spent)}</b> spent · ${c.orders} order${c.orders === 1 ? '' : 's'}</div>` : ''}
       <div class="vchips">${badges(c)}</div></span></a>`;
 }
 
@@ -66,7 +67,7 @@ function list(d) {
       <td><b>${esc(c.name || '—')}</b>${c.disabled ? ' <span class="pill failed">Disabled</span>' : ''}<small>${esc(VIA[c.created_via] || c.created_via)} · ${esc(timeAgo(c.created_at))}</small></td>
       <td class="mono">${c.phone ? '+91 ' + esc(c.phone) : '<span class="muted">—</span>'}<small>${esc(c.email || '')}</small></td>
       <td><div class="vchips">${badges(c)}</div></td>
-      <td>${c.has_orders ? 'Yes' : '<span class="muted">No</span>'}</td>
+      <td>${c.orders ? `<b>${inr(c.spent)}</b><small>${c.orders} order${c.orders === 1 ? '' : 's'}</small>` : c.has_orders ? 'Yes' : '<span class="muted">No</span>'}</td>
       <td class="num"><small>${c.last_login_at ? 'Seen ' + esc(timeAgo(c.last_login_at)) : ''}</small></td></tr>`).join('');
   const cards = d.customers.map(custCard).join('');
   return `<div class="table-wrap responsive"><table><thead><tr><th>Customer</th><th>Contact</th><th>Verified</th><th>Orders</th><th class="num">Last seen</th></tr></thead><tbody>${rows}</tbody></table></div>

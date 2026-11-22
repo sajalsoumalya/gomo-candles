@@ -1,6 +1,7 @@
 import { esc, icon, toast } from './ui.js';
 import { api, setAuthErrorHandler } from './api.js';
 import { getStats } from './stats.js';
+import { onChange, startLive } from './live.js';
 import { initAuth, isConfigured, devLoginAvailable, signInEmail, signInGoogle, resetPassword, sendVerification, reloadUser, signOut, devSignIn } from './auth.js';
 import { API_BASE } from './firebase-config.js';
 import * as dashboard from './views/dashboard.js';
@@ -21,19 +22,19 @@ const LOGO = `<svg viewBox="0 0 977 1000" aria-hidden="true"><path fill="current
 const GOOGLE = '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
 
 const ROUTES = [
-  { re: /^\/?$/, view: dashboard, nav: 'dashboard' },
-  { re: /^\/dashboard$/, view: dashboard, nav: 'dashboard' },
-  { re: /^\/orders$/, view: orders, nav: 'orders' },
-  { re: /^\/orders\/(GM-\d{6}-\d{4})$/, view: order, nav: 'orders' },
-  { re: /^\/offers$/, view: offers, nav: 'offers' },
-  { re: /^\/offers\/(new|[a-z0-9-]+)$/, view: offers, nav: 'offers', editor: true },
-  { re: /^\/products$/, view: products, nav: 'products' },
-  { re: /^\/coupons$/, view: coupons, nav: 'coupons' },
-  { re: /^\/roles$/, view: roles, nav: 'roles' },
-  { re: /^\/customers$/, view: customers, nav: 'customers' },
-  { re: /^\/customers\/([A-Za-z0-9_-]{1,128})$/, view: customers, nav: 'customers' },
-  { re: /^\/settings(?:\/([a-z]+))?$/, view: settings, nav: 'settings' },
-  { re: /^\/notifications$/, view: notifications, nav: 'notifications' },
+  { re: /^\/?$/, view: dashboard, nav: 'dashboard', live: ['orders', 'catalog', 'messages'] },
+  { re: /^\/dashboard$/, view: dashboard, nav: 'dashboard', live: ['orders', 'catalog', 'messages'] },
+  { re: /^\/orders$/, view: orders, nav: 'orders', live: ['orders'] },
+  { re: /^\/orders\/(GM-\d{6}-\d{4})$/, view: order, nav: 'orders', live: ['orders', 'messages'] },
+  { re: /^\/offers$/, view: offers, nav: 'offers', live: ['catalog'] },
+  { re: /^\/offers\/(new|[a-z0-9-]+)$/, view: offers, nav: 'offers', editor: true, live: ['catalog'], manual: true },
+  { re: /^\/products$/, view: products, nav: 'products', live: ['catalog'] },
+  { re: /^\/coupons$/, view: coupons, nav: 'coupons', live: ['coupons'] },
+  { re: /^\/roles$/, view: roles, nav: 'roles', live: ['staff'] },
+  { re: /^\/customers$/, view: customers, nav: 'customers', live: ['customers'] },
+  { re: /^\/customers\/([A-Za-z0-9_-]{1,128})$/, view: customers, nav: 'customers', live: ['customers', 'orders'] },
+  { re: /^\/settings(?:\/([a-z]+))?$/, view: settings, nav: 'settings', live: ['settings', 'staff'], manual: true },
+  { re: /^\/notifications$/, view: notifications, nav: 'notifications', live: ['messages'] },
 ];
 
 const NAV = [
@@ -233,8 +234,12 @@ async function refreshCounts() {
 }
 
 let renderSeq = 0;
+let current = null; // { r, m } of the page on screen, for live refreshes
+// A live refresh passes no query: views keep their own filter state, and the link's ?status= etc. only seeds it.
+const ctxFor = (r, m, seq, fromLink = true) => ({ id: m[1], editor: !!r.editor, query: new URLSearchParams(fromLink ? location.hash.split('?')[1] || '' : ''), isCurrent: () => seq === renderSeq, refreshCounts });
 async function route() {
   if (!state.admin) return;
+  hideLiveChip();
   const path = (location.hash.replace(/^#/, '') || '/').split('?')[0];
   let r = ROUTES.find((x) => x.re.test(path)) || ROUTES[0];
   if (!allowed(r.nav)) {
@@ -255,13 +260,62 @@ async function route() {
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === navKey || (r.nav === 'settings' && !m[1] && a.dataset.nav.startsWith('settings:') && a === document.querySelector('[data-nav^="settings:"]'))));
   const el = document.getElementById('view');
   const seq = ++renderSeq;
+  current = { r, m };
   window.scrollTo(0, 0);
   try {
-    await r.view.render(el, { id: m[1], editor: !!r.editor, query: new URLSearchParams(location.hash.split('?')[1] || ''), isCurrent: () => seq === renderSeq, refreshCounts });
+    await r.view.render(el, ctxFor(r, m, seq));
   } catch (e) {
     if (seq === renderSeq) el.innerHTML = `<div class="alert err">${esc(e.message)}</div>`;
   }
 }
+
+// ------------------------------------------------------------------ live refresh
+// Typed-but-unsaved values (filters excluded: they are kept in the view's own state and drawn back).
+function unsaved(view) {
+  return [...view.querySelectorAll('input, textarea, select')].some((f) => {
+    if (f.closest('.filters') || f.type === 'search' || f.type === 'file') return false;
+    if (f.type === 'checkbox' || f.type === 'radio') return f.checked !== f.defaultChecked;
+    if (f.tagName === 'SELECT') return [...f.options].some((o) => o.selected !== o.defaultSelected);
+    return f.value !== f.defaultValue;
+  });
+}
+// Redraw the page off-screen and swap it in, keeping the scroll position (no spinner flash).
+async function refreshView() {
+  if (!current) return;
+  hideLiveChip();
+  const { r, m } = current;
+  const old = document.getElementById('view');
+  const fresh = old.cloneNode(false);
+  const seq = ++renderSeq, y = window.scrollY;
+  try { await r.view.render(fresh, ctxFor(r, m, seq, false)); } catch { return; }
+  if (seq !== renderSeq || !old.isConnected) return;
+  old.replaceWith(fresh);
+  window.scrollTo(0, y);
+}
+function showLiveChip() {
+  let chip = document.getElementById('liveChip');
+  if (!chip) {
+    chip = document.createElement('button');
+    chip.type = 'button'; chip.id = 'liveChip'; chip.className = 'live-chip';
+    chip.innerHTML = `${icon('refresh')} New updates · tap to refresh`;
+    chip.addEventListener('click', async () => { chip.disabled = true; await refreshView(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+    document.body.appendChild(chip);
+  }
+  chip.disabled = false;
+  requestAnimationFrame(() => chip.classList.add('show'));
+}
+function hideLiveChip() { document.getElementById('liveChip')?.remove(); }
+
+onChange((moved) => {
+  if (!state.admin) return;
+  if (moved.has('orders') || moved.has('staff')) refreshCounts();
+  if (!current || !current.r.live?.some((t) => moved.has(t))) return;
+  const view = document.getElementById('view');
+  const busyHere = current.r.manual || document.querySelector('.overlay') || document.body.classList.contains('menu-open')
+    || (view.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && !document.activeElement.closest('.filters'))
+    || unsaved(view) || window.scrollY > 600;
+  if (busyHere) showLiveChip(); else refreshView();
+});
 
 async function boot(user) {
   state.user = user;
@@ -273,6 +327,7 @@ async function boot(user) {
     window.GOMO_ADMIN = admin; // read by views (e.g. packers don't see payment buttons)
     renderShell();
     route();
+    startLive();
     refreshCounts();
   } catch (e) {
     state.admin = null;

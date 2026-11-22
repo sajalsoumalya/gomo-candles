@@ -39,7 +39,7 @@ export async function render(el, ctx) {
           : '<div class="empty"><b>No orders yet</b>Orders placed on the website will appear here.</div>'}
       </div>
       <div class="card"><h3>Orders by status <span class="muted" style="font-family:var(--f-b);text-transform:none;font-size:.8rem">${total} total</span></h3>
-        <div class="bars">${STATUSES.map((st) => `<a class="bar-row" style="text-decoration:none" href="#/orders?status=${st}"><span>${esc(STATUS_LABELS[st])}</span><span class="track"><i style="width:${Math.round(((s.by_status[st] || 0) / max) * 100)}%"></i></span><b>${s.by_status[st] || 0}</b></a>`).join('')}</div>
+        <div class="bars">${STATUSES.map((st) => `<a class="bar-row" style="text-decoration:none" href="#/orders?status=${st}"><span>${esc(STATUS_LABELS[st])}</span><span class="track"><i style="width:${Math.round(((s.by_status[st] || 0) / max) * 100)}%"></i></span><b>${s.by_status[st] || 0}${s.amount_by_status ? `<small>${inr(s.amount_by_status[st] || 0)}</small>` : ''}</b></a>`).join('')}</div>
         <p class="muted mt" style="font-size:.8rem">${s.orders_30d} orders in the last 30 days.</p>
       </div>
     </div>`;

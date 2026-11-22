@@ -1787,16 +1787,7 @@
   function refreshCatalog() {
     if (!API || /REPLACE_WITH/.test(API)) { catalogFailed = true; catalogSettled(); renderProductPage(); renderOfferPage(); return Promise.resolve(); }
     return api('/api/catalog', { timeout: 8000 }).then(function (data) {
-      catalog = data;
-      live = true;
-      data.saved_at = Date.now();
-      store(CATALOG_KEY, data);
-      indexCatalog();
-      // drop cart lines that no longer exist
-      normalizeCart();
-      cart = cart.filter(function (i) { return resolve(i); });
-      store(CART_KEY, cart);
-      renderAll();
+      applyCatalog(data);
       catalogSettled();
       maybeOfferPopup();
       if (openPanel && openPanel.id === 'checkoutModal' && !ck.result) renderCheckout();
@@ -1808,6 +1799,40 @@
       console.warn('GoMo: using built-in catalog —', err.message);
     });
   }
+  function applyCatalog(data) {
+    catalog = data;
+    live = true;
+    data.saved_at = Date.now();
+    store(CATALOG_KEY, data);
+    indexCatalog();
+    // drop cart lines that no longer exist
+    normalizeCart();
+    cart = cart.filter(function (i) { return resolve(i); });
+    store(CART_KEY, cart);
+    renderAll();
+  }
+
+  // Live stock & prices: a tiny /api/changes check every 20 s while the page is on screen (and right away when the
+  // shopper comes back to the tab). Only when the admin changed something is the catalog fetched and redrawn in place.
+  var LIVE_MS = 20000, liveTimer = 0, liveAsked = 0;
+  function liveCheck() {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(liveCheck, LIVE_MS);
+    if (!live || document.visibilityState !== 'visible') return;
+    api('/api/changes', { timeout: 6000 }).then(function (c) {
+      var v = Number(c && c.catalog) || 0;
+      if (!v || v <= (Number(catalog.version) || 0) || v === liveAsked) return;
+      liveAsked = v;
+      return api('/api/catalog?v=' + v, { timeout: 8000 }).then(function (data) {
+        var y = window.scrollY;
+        applyCatalog(data);
+        // redrawn cards appear at once instead of fading in again
+        $$('.r:not(.vis)').forEach(function (el) { el.classList.add('vis'); });
+        window.scrollTo(0, y);
+      });
+    }).catch(function () { /* next check tries again */ });
+  }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') liveCheck(); });
 
   // the path picks the view (see ROUTE); everything else is the home page
   var policyPage = ROUTE.view === 'policy' && $('#policyView [data-policy="' + ROUTE.page + '"]');
@@ -1844,6 +1869,6 @@
   pageInteractions();
   bindEvents();
   renderAll();
-  refreshCatalog();
+  refreshCatalog().then(function () { liveTimer = setTimeout(liveCheck, LIVE_MS); });
   if (savedCatalog()) maybeOfferPopup();
 })();

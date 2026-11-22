@@ -92,7 +92,7 @@ export async function render(el, ctx) {
     history.replaceState(null, '', '#/orders');
     render(el, { ...ctx, query: new URLSearchParams() });
   });
-  load();
+  await load(); // resolve once the list is drawn (live refresh swaps in a finished page)
 }
 
 function table(d) {
@@ -106,7 +106,8 @@ function table(d) {
       <td>${paymentPill(o)}<small>${o.payment_method === 'cod' ? 'Cash on Delivery' : 'Online'}</small></td>
       <td class="num"><b>${inr(o.total)}</b></td></tr>`).join('');
   const cards = d.orders.map(orderCard).join('');
-  return `<div class="table-wrap responsive"><table><thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Status</th><th>Payment</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table></div>
+  const sum = d.amount != null ? `<div class="list-sum"><span><b>${d.total}</b> order${d.total === 1 ? '' : 's'}</span><span title="Total of the orders shown${filters.status === 'cancelled' ? '' : ', not counting cancelled ones'}"><b>${inr(d.amount)}</b> order value</span></div>` : '';
+  return `${sum}<div class="table-wrap responsive"><table><thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Status</th><th>Payment</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="list-cards o-list">${cards}</div>
     <div class="pager"><span>${d.total} order${d.total === 1 ? '' : 's'} · page ${d.page} of ${pages}</span>
       <span style="display:flex;gap:8px"><button class="btn btn-line btn-sm" data-prev ${d.page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn btn-line btn-sm" data-next ${d.page >= pages ? 'disabled' : ''}>Next</button></span></div>`;

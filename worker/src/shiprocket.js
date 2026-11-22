@@ -12,6 +12,7 @@ import { HttpError, json, nowIso, readJson, STATUS_LABELS } from './util.js';
 import { db, pushKey } from './db.js';
 import { getSettings } from './settings.js';
 import { notifyOrderEvent } from './notify.js';
+import { INDIAN_STATES, normalizePhone } from './validate.js';
 
 const API = 'https://apiv2.shiprocket.in/v1/external';
 const TOKEN_PATH = 'shiprocket/token';
@@ -169,14 +170,58 @@ async function pickupLocation(env, cfg, f) {
   if (fromEnv) return fromEnv;
   if (cfg?.pickup_location) return cfg.pickup_location;
   const list = await listPickups(env, f);
-  const usable = list.filter((p) => p.active);
-  const pick = usable.find((p) => p.primary) || (usable.length === 1 ? usable[0] : null);
+  const pick = defaultPickup(list);
   if (!pick) {
     throw new HttpError(422, list.length
       ? 'Choose the pickup address in Settings → Shipping → Shiprocket (your account has more than one).'
       : 'Add a pickup address in your Shiprocket account (Settings → Pickup Addresses) first.', { code: 'shiprocket_pickup' });
   }
-  return pick.name;
+  return pick;
+}
+const defaultPickup = (list) => {
+  const usable = list.filter((p) => p.active);
+  return (usable.find((p) => p.primary) || (usable.length === 1 ? usable[0] : null))?.name || null;
+};
+
+/** The pickup address for a booking: the one staff picked on the order page (must be active in Shiprocket), else the default. */
+async function chosenPickup(env, cfg, wanted, f) {
+  const name = String(wanted || '').trim();
+  if (!name || String(env.SHIPROCKET_PICKUP_LOCATION || '').trim()) return pickupLocation(env, cfg, f); // a server-fixed address always wins
+  const list = await listPickups(env, f);
+  const hit = list.find((p) => p.name === name);
+  if (!hit) throw new HttpError(422, `“${name}” is not a pickup address in your Shiprocket account.`, { fields: { pickup_location: 'Pick one of your Shiprocket pickup addresses.' } });
+  if (!hit.active) throw new HttpError(422, `“${name}” is not active in Shiprocket yet (its phone must be verified there).`, { fields: { pickup_location: 'This address is not confirmed in Shiprocket.' } });
+  return hit.name;
+}
+
+// Delivery details Shiprocket rejects when missing or malformed. Field names match the order record.
+const FIX_FIELDS = ['customer_name', 'phone', 'address_line1', 'address_line2', 'landmark', 'city', 'state', 'pincode'];
+export function shippingIssues(o) {
+  const f = {};
+  const s = (v) => String(v ?? '').trim();
+  if (s(o.customer_name).length < 2) f.customer_name = 'Enter the customer’s name.';
+  if (!normalizePhone(o.phone)) f.phone = 'A 10-digit Indian mobile number.';
+  if (s(o.address_line1).length < 5) f.address_line1 = 'House / flat and street, at least 5 characters.';
+  if (s(o.city).length < 2) f.city = 'Enter the city.';
+  if (!INDIAN_STATES.some((x) => x.toLowerCase() === s(o.state).toLowerCase())) f.state = 'Choose the state.';
+  if (!/^[1-9]\d{5}$/.test(s(o.pincode))) f.pincode = 'A 6-digit PIN code.';
+  return f;
+}
+/** Corrections typed on the order page → cleaned order fields (only the ones sent), or 422 with what is still wrong. */
+function cleanFix(order, fix) {
+  if (!fix || typeof fix !== 'object') return {};
+  const out = {};
+  for (const k of FIX_FIELDS) {
+    if (!(k in fix)) continue;
+    let v = String(fix[k] ?? '').replace(/\s+/g, ' ').trim().slice(0, k === 'landmark' ? 100 : 160);
+    if (k === 'phone') v = normalizePhone(v) || v;
+    if (k === 'pincode') v = v.replace(/\s/g, '');
+    if (k === 'state') v = INDIAN_STATES.find((x) => x.toLowerCase() === v.toLowerCase()) || v;
+    if (v !== String(order[k] ?? '')) out[k] = v || null;
+  }
+  const issues = shippingIssues({ ...order, ...out });
+  if (Object.keys(issues).length) throw new HttpError(422, 'Some delivery details still need fixing before Shiprocket accepts them.', { fields: issues });
+  return out;
 }
 
 export async function listPickups(env, f = fetch) {
@@ -223,6 +268,17 @@ export async function bookShipment(env, orderNo, body, admin, f = fetch) {
   }
   if (!items.length) throw new HttpError(409, 'This order has no items.');
 
+  // Checks Shiprocket would fail on come first, before anything is created or locked.
+  let fixed = {};
+  if (!order.shiprocket?.shipment_id) {
+    fixed = cleanFix(order, body?.fix);
+    if (!Object.keys(fixed).length) {
+      const issues = shippingIssues(order);
+      if (Object.keys(issues).length) throw new HttpError(422, 'Some delivery details need fixing before Shiprocket accepts them.', { fields: issues, code: 'shiprocket_details' });
+    }
+    parcelFor(body, cfg);
+  }
+
   const release = await lock(env, orderNo);
   const sr = { ...(order.shiprocket || {}) };
   const steps = [];
@@ -235,7 +291,13 @@ export async function bookShipment(env, orderNo, body, admin, f = fetch) {
     // 1. create the order in Shiprocket
     if (!sr.shipment_id) {
       const parcel = parcelFor(body, cfg);
-      const location = await pickupLocation(env, cfg, f);
+      const location = await chosenPickup(env, cfg, body?.pickup_location, f);
+      if (Object.keys(fixed).length) {
+        // corrected details are kept on the order too, so the label, slip and invoice all match
+        const changed = Object.keys(fixed).map((k) => `${k.replace(/_/g, ' ')}: ${fixed[k] ?? '—'}`).join(' · ');
+        await db(env).patch(`orders/${orderNo}`, { ...fixed, updated_at: nowIso(), [`events/${pushKey()}`]: event('note', null, `Delivery details corrected for Shiprocket — ${changed}`, admin?.email || null) });
+        Object.assign(order, fixed);
+      }
       sr.attempt = (sr.attempt || 0) + 1;
       // Shiprocket never reuses an order id (not even a cancelled one), so a re-booking adds a suffix.
       sr.sr_order_ref = orderNo.replace(/^GM-/, '') + (sr.attempt > 1 ? `-${sr.attempt}` : '');
@@ -417,6 +479,27 @@ export async function adminCancelShipment(env, orderNo, admin) {
 }
 export async function adminListPickups(env) {
   return json({ pickups: await listPickups(env) });
+}
+
+/** Everything the order page's booking form needs: pickup addresses, the default one, parcel defaults and fields to fix. */
+export async function prepareBooking(env, orderNo, f = fetch) {
+  const [{ order }, settings] = await Promise.all([loadOrderRaw(env, orderNo), getSettings(env)]);
+  const cfg = settings.shiprocket;
+  let pickups = [], pickups_error = null;
+  try { pickups = await listPickups(env, f); } catch (e) { pickups_error = e.message; }
+  const fixedByEnv = String(env.SHIPROCKET_PICKUP_LOCATION || '').trim() || null;
+  return {
+    pickups,
+    pickups_error,
+    default_pickup: fixedByEnv || cfg.pickup_location || defaultPickup(pickups),
+    pickup_locked: !!fixedByEnv,
+    parcel: { weight_kg: cfg.weight_kg, length_cm: cfg.length_cm, breadth_cm: cfg.breadth_cm, height_cm: cfg.height_cm },
+    issues: shippingIssues(order),
+    states: INDIAN_STATES,
+  };
+}
+export async function adminPrepareBooking(env, orderNo) {
+  return json(await prepareBooking(env, orderNo));
 }
 
 /**

@@ -73,5 +73,5 @@ export async function render(el, ctx) {
       moreOnScroll(res, { d, noun: 'messages', items: (p) => p.notifications, key: (n) => n.id, card: msgCard, wire: (nodes) => nodes.forEach(bind), fetchPage: (page) => api('/api/admin/notifications', { query: { ...filters, page } }) });
     } catch (e) { res.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; }
   };
-  load();
+  await load(); // resolve once the list is drawn (live refresh swaps in a finished page)
 }

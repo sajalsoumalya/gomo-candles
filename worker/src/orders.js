@@ -525,7 +525,22 @@ export async function adminListOrders(request, env) {
 
   const page = Math.max(1, Math.floor(Number(p('page')) || 1));
   const size = 20;
-  return json({ orders: rows.slice((page - 1) * size, page * size).map(({ items, ...o }) => o), total: rows.length, page, page_size: size });
+  // value of the orders matched by the filters; cancelled orders only count when that is what was asked for
+  const amount = rows.filter((o) => o.status !== 'cancelled' || p('status') === 'cancelled').reduce((s, o) => s + (Number(o.total) || 0), 0);
+  return json({ orders: rows.slice((page - 1) * size, page * size).map(({ items, ...o }) => o), total: rows.length, amount, page, page_size: size });
+}
+
+/** Per customer account (uid): orders placed and money received, over the newest ADMIN_SCAN_LIMIT orders. */
+export async function spendByCustomer(env) {
+  const out = {};
+  for (const o of await recentOrders(env)) {
+    if (!o.uid || o.status === 'cancelled') continue;
+    const c = (out[o.uid] ||= { n: 0, spent: 0, last_at: null });
+    c.n++;
+    if (o.payment_status === 'paid') c.spent += Number(o.total) || 0;
+    if (!c.last_at || o.created_at > c.last_at) c.last_at = o.created_at;
+  }
+  return out;
 }
 
 export async function adminGetOrder(env, orderNo) {
@@ -626,8 +641,8 @@ export async function adminStats(env) {
     recentOrders(env),
     db(env).get('notifications', { orderBy: 'created_at', startAt: since7 }),
   ]);
-  const by_status = {};
-  for (const o of orders) by_status[o.status] = (by_status[o.status] || 0) + 1;
+  const by_status = {}, amount_by_status = {};
+  for (const o of orders) { by_status[o.status] = (by_status[o.status] || 0) + 1; amount_by_status[o.status] = (amount_by_status[o.status] || 0) + (Number(o.total) || 0); }
   const counted = orders.filter((o) => o.status !== 'cancelled' && (o.payment_method === 'cod' || o.payment_status === 'paid'));
   const sum = (list) => list.reduce((s, o) => s + (Number(o.total) || 0), 0);
   const today = orders.filter((o) => o.created_at >= istMidnight);
@@ -636,6 +651,7 @@ export async function adminStats(env) {
   const low_stock = cat.products.filter((p) => p.stock != null && p.stock <= p.low_stock_at).map((p) => ({ id: p.id, name: p.name, stock: p.stock }));
   return json({
     by_status,
+    amount_by_status,
     low_stock,
     revenue_7d: sum(counted.filter((o) => o.created_at >= since7)),
     revenue_30d: sum(counted.filter((o) => o.created_at >= since30)),
