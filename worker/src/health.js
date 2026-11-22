@@ -7,6 +7,7 @@ import { s3, s3Configured } from './s3.js';
 import { getSettings, integrations } from './settings.js';
 import { smsReady } from './sms.js';
 import { openwaSession } from './notify.js';
+import { listPickups } from './shiprocket.js';
 
 const TIMEOUT = 8000;
 const short = (s) => String(s || '').replace(/\s+/g, ' ').slice(0, 160);
@@ -60,6 +61,15 @@ export const CHECKS = {
     return { ok: true, detail: `Keys accepted · ${String(env.RAZORPAY_KEY_ID).startsWith('rzp_live_') ? 'LIVE mode' : 'TEST mode'}` };
   },
 
+  /** Shiprocket: sign in and read the pickup addresses (read-only). */
+  async shiprocket(env) {
+    const list = await listPickups(env);
+    const usable = list.filter((p) => p.active);
+    return usable.length
+      ? { ok: true, detail: `Signed in · ${usable.length} pickup address${usable.length === 1 ? '' : 'es'} (${usable.map((p) => p.name).slice(0, 3).join(', ')})` }
+      : { ok: false, detail: 'Signed in, but no active pickup address — add one in Shiprocket → Settings → Pickup Addresses' };
+  },
+
   /** RustFS / S3: list one object under gomo/. */
   async s3(env) {
     await s3(env).listObjects('gomo/');
@@ -76,6 +86,7 @@ export async function adminCheckIntegrations(env) {
     openwa: ig.openwa,
     razorpay: ig.razorpay,
     s3: s3Configured(env),
+    shiprocket: ig.shiprocket,
   };
   const entries = await Promise.all(Object.entries(want).map(async ([k, on]) => [k, on ? await timed(() => CHECKS[k](env)) : { ok: null, detail: 'Not set' }]));
   const results = Object.fromEntries(entries);

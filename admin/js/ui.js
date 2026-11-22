@@ -56,6 +56,18 @@ export function paymentPill(o) {
   return o.payment_method === 'cod' ? '<span class="pill pending">COD due</span>' : '<span class="pill pending">Unpaid</span>';
 }
 
+export const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?';
+
+/** Order row used on phones (dashboard + orders list) */
+export function orderCard(o) {
+  const n = o.item_count;
+  return `<a class="o-card st-${esc(o.status)}" href="#/orders/${esc(o.order_no)}">
+    <span class="o-av" aria-hidden="true">${esc(initials(o.customer_name))}</span>
+    <span class="o-main"><b>${esc(o.customer_name)}</b><small><span class="mono">${esc(o.order_no)}</span>${o.city ? ' · ' + esc(o.city) : ''}</small></span>
+    <span class="o-amt"><b>${inr(o.total)}</b><small>${esc(timeAgo(o.created_at))}</small></span>
+    <span class="o-tags">${statusPill(o.status)}${paymentPill(o)}${n ? `<span class="o-n">${n} item${n === 1 ? '' : 's'}</span>` : ''}</span></a>`;
+}
+
 export const ART = { candle: '#i-candle', sachet: '#i-sachet', spray: '#i-spray', gift: '#i-gift' };
 export const artSvg = (art) => `<svg aria-hidden="true"><use href="${ART[art] || ART.candle}"/></svg>`;
 
@@ -85,6 +97,13 @@ const ICONS = {
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.9-3.4 3.4-5.2 6.5-5.2s5.6 1.8 6.5 5.2"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.9c1.5.8 2.6 2.5 3 5.1"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="m21 16-5-5-9 9"/>',
   pin: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.6"/>',
+  grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>',
+  filter: '<path d="M4 6h16M7 12h10M10 18h4"/>',
+  cash: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v5M18 9.5v5"/>',
+  trend: '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  chev: '<path d="m9 6 6 6-6 6"/>',
+  alert: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
 };
 export const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
@@ -171,6 +190,48 @@ export function debounce(fn, ms = 300) {
 }
 
 export const loading = (text = 'Loading…') => `<div class="loading"><span class="spinner"></span> ${esc(text)}</div>`;
+
+/**
+ * Phones: instead of Previous/Next, fetch the next page when the end of the card list scrolls near and append it.
+ * `d` is the first page ({ total, page, page_size }); items(d) gives its rows, key(row) de-duplicates rows that shift
+ * between pages when new ones arrive, card(row) is the row's HTML and wire(nodes) binds buttons on appended cards.
+ */
+export function moreOnScroll(res, { d, noun, items, key, card, fetchPage, wire }) {
+  const list = res.querySelector('.list-cards'), pager = res.querySelector('.pager');
+  if (!list || !pager || !matchMedia('(max-width:720px)').matches) return;
+  pager.classList.add('auto');
+  const label = pager.querySelector('span');
+  const seen = new Set(items(d).map(key));
+  let total = d.total, next = d.page + 1, busy = false;
+  const show = () => { label.textContent = `Showing ${list.children.length} of ${total} ${noun}`; };
+  show();
+  if (d.page * d.page_size >= total) return;
+  const foot = document.createElement('button');
+  foot.type = 'button'; foot.className = 'more-foot'; foot.textContent = 'Load more';
+  list.after(foot);
+  const near = () => foot.isConnected && foot.getBoundingClientRect().top < innerHeight + 600;
+  const run = async () => {
+    if (busy || !foot.isConnected) return;
+    busy = true; foot.innerHTML = '<span class="spinner"></span> Loading more…';
+    try {
+      const p = await fetchPage(next);
+      if (!foot.isConnected) return;
+      const fresh = items(p).filter((x) => !seen.has(key(x)));
+      fresh.forEach((x) => seen.add(key(x)));
+      const before = list.children.length;
+      list.insertAdjacentHTML('beforeend', fresh.map(card).join(''));
+      wire?.([...list.children].slice(before));
+      total = p.total; next = p.page + 1; show();
+      if (p.page * p.page_size >= p.total || !items(p).length) { io.disconnect(); foot.remove(); return; }
+      foot.textContent = 'Load more';
+    } catch { foot.textContent = 'Couldn’t load more — tap to try again'; busy = false; return; }
+    busy = false;
+    if (near()) run(); // a short page may leave the end of the list on screen
+  };
+  const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) run(); }, { rootMargin: '0px 0px 600px 0px' });
+  io.observe(foot);
+  foot.addEventListener('click', run);
+}
 export const errorBox = (e) => `<div class="alert err">${esc(e.message || e)}</div>`;
 
 export async function copyText(text) {

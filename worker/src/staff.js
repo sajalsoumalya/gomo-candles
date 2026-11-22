@@ -40,15 +40,16 @@ const BUILTIN = new Set(Object.keys(ROLES));
 /** Settings sections (top-level keys of the settings object) → the page that may change them. */
 export const SETTINGS_AREA = {
   store: 'set_store', shipping: 'set_shipping', payments: 'set_payments', invoice: 'set_invoice',
-  notify: 'set_notify', templates: 'set_templates', otp: 'set_signin', sms: 'set_signin',
+  notify: 'set_notify', templates: 'set_templates', otp: 'set_signin', sms: 'set_signin', shiprocket: 'set_shipping',
 };
 
 /** Which permission an admin API call needs. Reading settings is allowed with any settings page; writes are checked per section. */
 export function areaFor(method, path) {
-  if (path === '/api/admin/me') return 'any';
+  if (path === '/api/admin/me' || path === '/api/admin/changes') return 'any'; // changes = timestamps only
   if (path === '/api/admin/settings') return method === 'GET' ? 'settings_any' : 'settings_write';
   if (/^\/api\/admin\/(staff|roles|access-requests|backups)/.test(path)) return 'owner'; // super admin only
   if (/^\/api\/admin\/storage/.test(path)) return 'set_storage';
+  if (/^\/api\/admin\/shiprocket/.test(path)) return 'set_shipping'; // pickup addresses for Settings → Shipping
   if (/^\/api\/admin\/test-otp/.test(path)) return 'set_signin';
   if (/^\/api\/admin\/(test-notification|integrations)/.test(path)) return 'set_integrations';
   if (/^\/api\/admin\/coupons/.test(path)) return 'coupons';

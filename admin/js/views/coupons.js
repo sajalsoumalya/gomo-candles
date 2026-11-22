@@ -21,8 +21,8 @@ function state(c) {
 function draw(el, coupons, ctx) {
   el.innerHTML = `
     <div class="page-head"><div><h1>Coupons</h1><p>Discount codes customers enter at checkout. One code per order; usage is counted when the order is placed and given back if you cancel it.</p></div>
-      <div class="actions"><button class="btn btn-primary" id="newC">${icon('plus')} New coupon</button></div></div>
-    ${coupons.length ? `<div class="table-wrap"><table><thead><tr><th>Code</th><th>Discount</th><th>Used</th><th>Status</th><th></th></tr></thead><tbody>
+      <div class="actions"><button class="btn btn-primary fab" id="newC">${icon('plus')} New coupon</button></div></div>
+    ${coupons.length ? `<div class="table-wrap responsive"><table><thead><tr><th>Code</th><th>Discount</th><th>Used</th><th>Status</th><th></th></tr></thead><tbody>
       ${coupons.map((c) => { const [cls, label] = state(c); return `<tr data-code="${esc(c.code)}">
         <td><b class="mono">${esc(c.code)}</b>${c.description ? `<small class="muted" style="display:block">${esc(c.description)}</small>` : ''}</td>
         <td>${esc(c.summary)}</td>
@@ -30,10 +30,15 @@ function draw(el, coupons, ctx) {
         <td><span class="pill ${cls}">${esc(label)}</span></td>
         <td style="white-space:nowrap;text-align:right"><button class="btn btn-line btn-sm" data-edit>${icon('edit')} Edit</button>
           <button class="btn btn-ghost btn-sm" data-del aria-label="Delete">${icon('trash')}</button></td></tr>`; }).join('')}
-      </tbody></table></div>` : `<div class="card"><p class="muted">No coupons yet. Create one, e.g. <b class="mono">WELCOME10</b> for 10% off a first order.</p></div>`}`;
+      </tbody></table></div>
+      <div class="list-cards">${coupons.map((c) => { const [cls, label] = state(c); return `<div class="list-card c-card" data-code="${esc(c.code)}">
+        <div class="top"><b class="mono c-code">${esc(c.code)}</b><span class="pill ${cls}">${esc(label)}</span></div>
+        ${c.summary ? `<div class="c-sum">${esc(c.summary)}</div>` : ''}${c.description ? `<small class="muted">${esc(c.description)}</small>` : ''}
+        <div class="meta"><span>Used ${c.used_count || 0}${c.usage_limit ? ` of ${c.usage_limit}` : ''} time${(c.used_count || 0) === 1 && !c.usage_limit ? '' : 's'}</span>
+          <span style="display:flex;gap:6px"><button class="btn btn-line btn-sm" data-edit>${icon('edit')} Edit</button><button class="icon-btn" data-del aria-label="Delete ${esc(c.code)}">${icon('trash')}</button></span></div></div>`; }).join('')}</div>` : `<div class="card"><p class="muted">No coupons yet. Create one, e.g. <b class="mono">WELCOME10</b> for 10% off a first order.</p></div>`}`;
 
   el.querySelector('#newC').addEventListener('click', () => edit(null, () => render(el, ctx)));
-  el.querySelectorAll('tr[data-code]').forEach((tr) => {
+  el.querySelectorAll('[data-code]').forEach((tr) => {
     const c = coupons.find((x) => x.code === tr.dataset.code);
     tr.querySelector('[data-edit]').addEventListener('click', () => edit(c, () => render(el, ctx)));
     tr.querySelector('[data-del]').addEventListener('click', async () => {

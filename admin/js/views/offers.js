@@ -47,7 +47,7 @@ function list(el, d) {
 
   el.innerHTML = `
     <div class="page-head"><div><h1>Offers</h1><p>Combos and packs shown on the website. The “worth” price and savings are calculated from product prices.</p></div>
-      <div class="actions"><a class="btn btn-line" href="#/offers/new?type=pack">${icon('plus')} New pack</a><a class="btn btn-primary" href="#/offers/new?type=combo">${icon('plus')} New combo</a></div></div>
+      <div class="actions"><a class="btn btn-line" href="#/offers/new?type=pack">${icon('plus')} New pack</a><a class="btn btn-primary fab" href="#/offers/new?type=combo">${icon('plus')} New combo</a></div></div>
     ${section('Combos', combos, 'combo')}
     ${section('Packs', packs, 'pack')}`;
 
@@ -78,8 +78,9 @@ function list(el, d) {
 function card(o) {
   const [cls, label] = offerState(o);
   return `<div class="p-card">
-    <div class="vis${hasPics(o) ? ' has-photo' : ''}"><span class="pill ${cls}">${esc(label)}</span>${offerArt(o)}</div>
+    <div class="vis${hasPics(o) ? ' has-photo' : ''}"><span class="pill vis-st ${cls}">${esc(label)}</span>${offerArt(o)}</div>
     <div class="body">
+      <span class="pill m-pill ${cls}">${esc(label)}</span>
       <small>${esc(o.badge || (o.type === 'pack' ? 'Pack' : 'Combo'))}</small>
       <b>${esc(o.name)}</b>
       <small>${esc(o.contents)}</small>

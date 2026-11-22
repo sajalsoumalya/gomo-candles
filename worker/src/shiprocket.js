@@ -163,7 +163,11 @@ const pickedUp = (sr) => Boolean(sr?.picked_up) || FLOW.indexOf(mapCourierStatus
 // ------------------------------------------------------------------ helpers
 
 async function pickupLocation(env, cfg, f) {
-  if (cfg.pickup_location) return cfg.pickup_location;
+  // Worker variable SHIPROCKET_PICKUP_LOCATION (the exact "Pickup Location" name in Shiprocket) wins,
+  // then the choice in Admin → Settings → Shipping, then the account's primary address.
+  const fromEnv = String(env.SHIPROCKET_PICKUP_LOCATION || '').trim();
+  if (fromEnv) return fromEnv;
+  if (cfg?.pickup_location) return cfg.pickup_location;
   const list = await listPickups(env, f);
   const usable = list.filter((p) => p.active);
   const pick = usable.find((p) => p.primary) || (usable.length === 1 ? usable[0] : null);

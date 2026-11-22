@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { esc, inr, fmtDate, statusPill, paymentPill, STATUSES, STATUS_LABELS, EVENT_LABELS, loading, icon, toast, busy, showFieldErrors, confirmDialog, copyText } from '../ui.js';
+import { esc, inr, fmtDate, statusPill, paymentPill, STATUSES, STATUS_LABELS, EVENT_LABELS, loading, icon, toast, busy, showFieldErrors, confirmDialog, copyText, initials } from '../ui.js';
 
 const canPay = () => { const a = window.GOMO_ADMIN?.areas || []; return a.includes('*') || a.includes('payments_edit'); };
 const FLOW = ['placed', 'confirmed', 'packed', 'shipped', 'out_for_delivery', 'delivered'];
@@ -24,10 +24,11 @@ function draw(el, d, ctx) {
   const locked = o.status === 'cancelled' || o.status === 'delivered';
   const suggested = o.status === 'cancelled' ? 'cancelled' : nextStatus(o.status);
   const canCancel = !['shipped', 'out_for_delivery', 'delivered', 'cancelled'].includes(o.status);
+  const units = d.items.reduce((n, i) => n + (Number(i.qty) || 0), 0);
 
   el.innerHTML = `
     <a class="back-link" href="#/orders">${icon('back')} All orders</a>
-    <div class="page-head"><div><h1 class="mono" style="font-family:var(--f-d)">${esc(o.order_no)}</h1>
+    <div class="page-head o-head"><div><h1 class="mono" style="font-family:var(--f-d)">${esc(o.order_no)}</h1>
       <p>Placed ${esc(fmtDate(o.created_at))} · ${statusPill(o.status)} ${paymentPill(o)}</p></div>
       <div class="actions">
         ${o.invoice?.number || o.status !== 'cancelled' ? `<button class="btn btn-line" id="invoice">${icon('print')} ${o.invoice?.number ? 'Invoice ' + esc(o.invoice.number) : 'Create invoice'}</button>` : ''}
@@ -36,11 +37,24 @@ function draw(el, d, ctx) {
       : o.status === 'cancelled' && o.cancelled_by === 'customer' ? `<div class="alert info" style="margin-bottom:14px">Cancelled by the customer.</div>`
       : o.payment_attention && o.payment_status === 'paid' && o.status !== 'cancelled' ? `<div class="alert err" style="margin-bottom:14px"><b>Check this payment.</b> The amount received differs from the order total — see the timeline.</div>` : ''}
 
-    <div class="grid g-main">
+    <section class="o-hero m-only st-${esc(o.status)}">
+      <div class="oh-top"><span class="o-av" aria-hidden="true">${esc(initials(o.customer_name))}</span>
+        <span class="oh-who"><b>${esc(o.customer_name)}</b><small>${esc(o.city)} · ${esc(fmtDate(o.created_at))}</small></span>
+        <span class="oh-amt"><b>${inr(o.total)}</b><small>${units} item${units === 1 ? '' : 's'} · ${o.payment_method === 'cod' ? 'COD' : 'Online'}</small></span></div>
+      <div class="oh-tags">${statusPill(o.status)}${paymentPill(o)}</div>
+      <div class="oh-acts">
+        <a href="tel:+91${esc(o.phone)}">${icon('phone')}<span>Call</span></a>
+        <a href="https://wa.me/91${esc(o.phone)}" target="_blank" rel="noopener">${icon('wa')}<span>WhatsApp</span></a>
+        <button type="button" id="copyAddr2">${icon('copy')}<span>Address</span></button>
+        <button type="button" id="print2">${icon('print')}<span>Slip</span></button></div>
+    </section>
+
+    <div class="grid g-main order-grid">
       <div class="grid" style="align-content:start">
-        <div class="card">
+        <div class="card oc-upd">
           <h3>Update order</h3>
-          ${o.status !== 'cancelled' ? `<div class="status-steps">${FLOW.map((s, i) => `<span class="${i <= idx ? 'done' : ''}">${esc(STATUS_LABELS[s])}</span>`).join('')}</div>` : '<div class="alert err">This order is cancelled.</div>'}
+          ${o.status !== 'cancelled' ? `<div class="status-steps">${FLOW.map((s, i) => `<span class="${i <= idx ? 'done' : ''}">${esc(STATUS_LABELS[s])}</span>`).join('')}</div>
+            <p class="step-now m-only">Step ${idx + 1} of ${FLOW.length} · <b>${esc(STATUS_LABELS[o.status])}</b>${idx < FLOW.length - 1 ? ` — next: ${esc(STATUS_LABELS[FLOW[idx + 1]])}` : ''}</p>` : '<div class="alert err">This order is cancelled.</div>'}
           ${locked ? '' : `<form class="form" id="upd" novalidate>
             <div class="form-row">
               <div class="field" data-field="status"><label for="st">Status</label>
@@ -64,7 +78,9 @@ function draw(el, d, ctx) {
           </form>`}
         </div>
 
-        <div class="card"><h3>Items</h3>
+        ${shipCard(d)}
+
+        <div class="card oc-items"><h3>Items</h3>
           <div class="items-list">${d.items.map((i) => `<div class="it"><span>${i.qty} × ${esc(i.name)}${i.contents ? `<small>${esc(i.contents)}</small>` : ''}${i.kind === 'offer' ? '<small>Offer price ' + inr(i.unit_price) + ' (worth ' + inr(i.compare_unit_price) + ')</small>' : ''}</span><b>${inr(i.line_total)}</b></div>`).join('')}</div>
           <div class="sum">
             <div><span>Subtotal</span><span>${inr(o.subtotal)}</span></div>
@@ -76,7 +92,7 @@ function draw(el, d, ctx) {
           ${o.notes ? `<div class="alert info mt" style="margin-bottom:0"><b>Customer note:</b> ${esc(o.notes)}</div>` : ''}
         </div>
 
-        <div class="card"><h3>Timeline</h3>
+        <div class="card oc-time"><h3>Timeline</h3>
           <ul class="timeline">${d.events.slice().reverse().map((e) => `<li class="${e.type === 'note' ? 'note' : ''}">
             <b>${e.type === 'status' ? esc(STATUS_LABELS[e.status] || e.status) : esc(EVENT_TEXT[e.type] || e.type)}</b>${e.note ? ` — ${esc(e.note)}` : ''}
             <small>${esc(fmtDate(e.created_at))} · ${esc(e.actor || '')}</small></li>`).join('')}</ul>
@@ -84,7 +100,7 @@ function draw(el, d, ctx) {
       </div>
 
       <div class="grid" style="align-content:start">
-        <div class="card"><h3>Customer</h3>
+        <div class="card oc-cust"><h3>Customer</h3>
           <dl class="kv"><dt>Name</dt><dd>${esc(o.customer_name)}</dd><dt>Mobile</dt><dd>+91 ${esc(o.phone)}${o.phone_verified === false ? ' <span class="pill placed" title="Typed at checkout without a code. Call to confirm before shipping.">Not verified — call to confirm</span>' : ''}</dd><dt>Email</dt><dd>${o.email ? esc(o.email) : '<span class="muted">—</span>'}</dd></dl>
           <div class="quick">
             <a class="btn btn-line btn-sm" href="tel:+91${esc(o.phone)}">${icon('phone')} Call</a>
@@ -97,7 +113,7 @@ function draw(el, d, ctx) {
           ${o.uid ? `<p class="mt" style="font-size:.84rem"><a href="#/customers/${esc(o.uid)}">${icon('users')} View customer account</a></p>` : ''}
         </div>
 
-        <div class="card"><h3>Payment</h3>
+        <div class="card oc-pay"><h3>Payment</h3>
           <dl class="kv"><dt>Method</dt><dd>${o.payment_method === 'cod' ? 'Cash on Delivery' : 'Online (Razorpay)'}</dd>
             <dt>Status</dt><dd>${paymentPill(o)}</dd>
             ${o.razorpay_order_id ? `<dt>Razorpay order</dt><dd class="mono">${esc(o.razorpay_order_id)}</dd>` : ''}
@@ -111,7 +127,7 @@ function draw(el, d, ctx) {
           </div>
         </div>
 
-        <div class="card"><h3>Messages</h3>
+        <div class="card oc-msg"><h3>Messages</h3>
           ${d.notifications.length ? d.notifications.map((n) => `<div class="notif-row"><span>${n.channel === 'email' ? icon('mail') : icon('wa')}</span>
             <span style="flex:1;min-width:0">${esc(EVENT_LABELS[n.event] || n.event)}<small>${esc(n.recipient)} · ${esc(fmtDate(n.created_at))}${n.error ? ' · ' + esc(n.error) : ''}</small></span>
             <span class="pill ${esc(n.status)}">${esc(n.status)}</span></div>`).join('') : '<p class="muted" style="font-size:.86rem">No messages sent yet.</p>'}
@@ -125,6 +141,8 @@ function draw(el, d, ctx) {
     </div>`;
 
   el.querySelector('#copyAddr').addEventListener('click', () => copyText(addressText(o)));
+  el.querySelector('#copyAddr2').addEventListener('click', () => copyText(addressText(o)));
+  el.querySelector('#print2').addEventListener('click', () => printSlip(d));
   el.querySelector('#print').addEventListener('click', () => printSlip(d));
   el.querySelector('#invoice')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
@@ -179,6 +197,51 @@ function draw(el, d, ctx) {
     try { reload(await api(`/api/admin/orders/${o.order_no}`, { method: 'PATCH', body: { payment_status: 'refunded' } })); }
     catch (err) { toast(err.message, 'err'); }
   });
+  // Shiprocket
+  const sf = el.querySelector('#srForm');
+  sf?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const sr = o.shiprocket || {};
+    const cash = o.payment_method === 'cod' && o.payment_status !== 'paid';
+    if (!(await confirmDialog({
+      title: sr.shipment_id ? 'Continue booking?' : 'Book pickup with Shiprocket?',
+      message: `Shiprocket assigns a courier and charges the shipment to your Shiprocket wallet. ${cash ? `The courier will collect ${inr(o.total)} in cash.` : 'Prepaid: the courier collects nothing.'}`,
+      confirmText: sr.shipment_id ? 'Continue booking' : 'Book pickup',
+    }))) return;
+    const btn = sf.querySelector('#srGo');
+    const val = (id) => sf.querySelector(id)?.value ?? '';
+    busy(btn, true, 'Booking with Shiprocket…');
+    try {
+      const r = await api(`/api/admin/orders/${o.order_no}/shiprocket/book`, { method: 'POST', body: {
+        weight_kg: val('#srW'), length_cm: val('#srL'), breadth_cm: val('#srB'), height_cm: val('#srH'), pickup_date: val('#srD'),
+      } });
+      toast(`Pickup booked · ${r.shiprocket.courier_name || 'courier'} · AWB ${r.shiprocket.awb}`, 'ok');
+      reload();
+    } catch (err) {
+      busy(btn, false);
+      if (err.data?.fields) showFieldErrors(sf, err.data.fields);
+      toast(err.message, 'err');
+      if (err.data?.code === 'shiprocket_step') reload();
+    }
+  });
+  el.querySelector('#srSync')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    busy(btn, true, 'Checking…');
+    try {
+      const r = await api(`/api/admin/orders/${o.order_no}/shiprocket/sync`, { method: 'POST' });
+      toast(r.moved ? `Order moved to ${STATUS_LABELS[r.moved] || r.moved}` : `Courier status: ${r.shiprocket.status || r.shiprocket.sync_error || 'no update yet'}`, 'ok');
+      reload();
+    } catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  });
+  el.querySelector('#srCancel')?.addEventListener('click', async (e) => {
+    if (!(await confirmDialog({ title: 'Cancel the Shiprocket booking?', message: 'The pickup and AWB are cancelled in Shiprocket. The order itself stays as it is, and you can book again.', confirmText: 'Cancel booking', danger: true }))) return;
+    const btn = e.currentTarget;
+    busy(btn, true, 'Cancelling…');
+    try { await api(`/api/admin/orders/${o.order_no}/shiprocket/cancel`, { method: 'POST' }); toast('Shiprocket booking cancelled', 'ok'); reload(); }
+    catch (err) { busy(btn, false); toast(err.message, 'err'); }
+  });
+  el.querySelector('#srCopy')?.addEventListener('click', () => copyText(o.shiprocket.awb));
+
   el.querySelector('#checkPay')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     busy(btn, true, 'Asking Razorpay…');
@@ -235,6 +298,63 @@ function draw(el, d, ctx) {
       reload();
     } catch (err) { busy(btn, false); toast(err.message, 'err'); }
   });
+}
+
+// Courier pickup through Shiprocket: book → (courier picks up) → tracking updates move the order forward
+function shipCard(d) {
+  const o = d.order, sr = o.shiprocket || {}, ready = d.shipping?.ready;
+  const parcel = { ...(d.shipping?.parcel || {}), ...(sr.parcel ? { weight_kg: sr.parcel.weight, length_cm: sr.parcel.length, breadth_cm: sr.parcel.breadth, height_cm: sr.parcel.height } : {}) };
+  const booked = sr.awb && sr.pickup_requested;
+  const history = (sr.history || []).length ? `<p class="muted" style="font-size:.76rem;margin:8px 0 0">Earlier bookings cancelled: ${sr.history.map((h) => esc(h.awb || `#${h.sr_order_id}`)).join(', ')}</p>` : '';
+  if (!ready) {
+    if (!booked) return `<div class="card ship-card"><h3>Courier pickup</h3><p class="muted" style="font-size:.84rem;margin:0">Connect Shiprocket to book courier pickups from this page: add <span class="mono">SHIPROCKET_EMAIL</span> and <span class="mono">SHIPROCKET_PASSWORD</span> (an API user from Shiprocket → Settings → API) to the server. Until then, enter the courier and tracking number above.</p></div>`;
+  }
+  if (booked) {
+    const canCancel = !sr.picked_up && !['shipped', 'out_for_delivery', 'delivered'].includes(o.status) && ready;
+    const acts = (sr.activities || []).slice(0, 3);
+    return `<div class="card ship-card"><h3>Courier pickup · Shiprocket</h3>
+      ${sr.attention ? `<div class="alert err" style="margin-bottom:10px"><b>${esc(sr.attention)}</b> — check this shipment in Shiprocket (the order status was not changed).</div>` : ''}
+      <dl class="kv">
+        <dt>Courier</dt><dd>${esc(sr.courier_name || o.courier || '—')}</dd>
+        <dt>AWB</dt><dd><span class="mono">${esc(sr.awb)}</span> <button class="icon-btn" id="srCopy" aria-label="Copy AWB">${icon('copy')}</button></dd>
+        <dt>Pickup</dt><dd>${sr.pickup_scheduled_date ? esc(sr.pickup_scheduled_date) : 'Requested'}${sr.pickup_token ? `<small class="muted"> · ${esc(sr.pickup_token)}</small>` : ''}</dd>
+        <dt>Status</dt><dd>${esc(sr.status || 'Pickup scheduled')}${sr.etd ? `<small class="muted"> · expected ${esc(sr.etd)}</small>` : ''}</dd>
+        <dt>Collect</dt><dd>${sr.cod_amount ? `<b>${inr(sr.cod_amount)} cash</b>` : 'Prepaid'}</dd>
+        ${sr.last_sync ? `<dt>Updated</dt><dd>${esc(fmtDate(sr.last_sync))}${sr.sync_error ? `<small class="muted"> · ${esc(sr.sync_error)}</small>` : ''}</dd>` : ''}
+      </dl>
+      ${acts.length ? `<ul class="ship-acts">${acts.map((a) => `<li><b>${esc(a.activity)}</b><small>${esc(a.date || '')}${a.location ? ` · ${esc(a.location)}` : ''}</small></li>`).join('')}</ul>` : ''}
+      <div class="quick">
+        ${sr.label_url ? `<a class="btn btn-primary btn-sm" href="${esc(sr.label_url)}" target="_blank" rel="noopener">${icon('print')} Print label</a>` : ''}
+        ${sr.manifest_url ? `<a class="btn btn-line btn-sm" href="${esc(sr.manifest_url)}" target="_blank" rel="noopener">Manifest</a>` : ''}
+        ${ready ? `<button class="btn btn-line btn-sm" id="srSync">${icon('refresh')} Refresh tracking</button>` : ''}
+        ${canCancel ? '<button class="btn btn-ghost btn-sm" id="srCancel">Cancel shipment</button>' : ''}
+      </div>
+      <p class="muted" style="font-size:.76rem;margin:8px 0 0">Courier updates move the order to Shipped, Out for delivery and Delivered automatically.</p>${history}</div>`;
+  }
+  if (['cancelled', 'delivered'].includes(o.status)) return '';
+  const unpaidOnline = o.payment_method === 'razorpay' && o.payment_status !== 'paid';
+  const cash = o.payment_method === 'cod' && o.payment_status !== 'paid';
+  const v = (x) => (x == null ? '' : esc(x));
+  const today = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+  return `<div class="card ship-card"><h3>Courier pickup · Shiprocket</h3>
+    ${sr.error ? `<div class="alert err" style="margin-bottom:10px"><b>Booking stopped at: ${esc({ create: 'creating the Shiprocket order', awb: 'assigning a courier', pickup: 'requesting the pickup' }[sr.error.step] || sr.error.step)}.</b> ${esc(sr.error.message)}</div>` : ''}
+    ${unpaidOnline ? '<div class="alert info" style="margin-bottom:10px">Waiting for the online payment — book the pickup once it is paid.</div>' : ''}
+    <form class="form" id="srForm" novalidate>
+      ${sr.shipment_id ? `<p style="font-size:.86rem;margin:0">Shiprocket order <span class="mono">#${esc(sr.sr_order_id)}</span> is created${sr.awb ? ` and courier ${esc(sr.courier_name || '')} assigned (AWB <span class="mono">${esc(sr.awb)}</span>)` : ''}. Continue to finish the booking.</p>`
+        : `<div class="form-row">
+          <div class="field" data-field="weight_kg"><label for="srW">Weight (kg)</label><input id="srW" type="number" step="0.01" min="0.01" max="50" value="${v(parcel.weight_kg)}" inputmode="decimal"></div>
+          <div class="field" data-field="pickup_date"><label for="srD">Pickup date <i>(optional)</i></label><input id="srD" type="date" min="${today}"><div class="hint">Empty = next available slot.</div></div>
+        </div>
+        <div class="form-row three">
+          <div class="field" data-field="length_cm"><label for="srL">Length (cm)</label><input id="srL" type="number" step="0.5" min="0.5" value="${v(parcel.length_cm)}" inputmode="decimal"></div>
+          <div class="field" data-field="breadth_cm"><label for="srB">Breadth (cm)</label><input id="srB" type="number" step="0.5" min="0.5" value="${v(parcel.breadth_cm)}" inputmode="decimal"></div>
+          <div class="field" data-field="height_cm"><label for="srH">Height (cm)</label><input id="srH" type="number" step="0.5" min="0.5" value="${v(parcel.height_cm)}" inputmode="decimal"></div>
+        </div>`}
+      <div class="row-between">
+        <span style="font-size:.84rem">${cash ? `Courier collects <b>${inr(o.total)}</b> cash` : unpaidOnline ? 'Online payment pending' : 'Prepaid — courier collects nothing'}</span>
+        <button class="btn btn-primary" type="submit" id="srGo" ${unpaidOnline ? 'disabled' : ''}>${sr.shipment_id ? 'Continue booking' : 'Book pickup with Shiprocket'}</button>
+      </div>
+    </form>${history}</div>`;
 }
 
 // Online refund: awaiting review → (Process refund) → initiated → refunded

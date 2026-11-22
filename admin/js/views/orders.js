@@ -1,7 +1,8 @@
 import { api } from '../api.js';
 import { getToken } from '../auth.js';
 import { API_BASE } from '../firebase-config.js';
-import { esc, inr, fmtDate, timeAgo, statusPill, paymentPill, STATUSES, STATUS_LABELS, loading, errorBox, icon, debounce, toast } from '../ui.js';
+import { esc, inr, fmtDate, timeAgo, statusPill, paymentPill, STATUSES, STATUS_LABELS, loading, errorBox, icon, debounce, toast, orderCard, moreOnScroll } from '../ui.js';
+import { getStats } from '../stats.js';
 
 const filters = { status: '', payment: '', q: '', from: '', to: '', page: 1 };
 
@@ -13,10 +14,12 @@ export async function render(el, ctx) {
 
   el.innerHTML = `
     <div class="page-head"><div><h1>Orders</h1><p>Confirm, pack, ship — customers are notified at each step.</p></div>
-      ${window.GOMO_ADMIN?.areas?.some((x) => x === '*' || x === 'exports') ? `<div class="actions"><button class="btn btn-line" id="exportCsv">${icon('print')} Export CSV</button></div>` : ''}</div>
+      ${window.GOMO_ADMIN?.areas?.some((x) => x === '*' || x === 'exports') ? `<div class="actions"><button class="btn btn-line" id="exportCsv">${icon('print')} <span>Export CSV</span></button></div>` : ''}</div>
     <div class="filters"><div class="chips" id="statusChips"></div></div>
     <div class="filters">
       <label class="search">${icon('search')}<input id="q" type="search" placeholder="Order no, name, phone or email" value="${esc(filters.q)}" aria-label="Search orders"></label>
+      <button class="btn btn-line f-toggle" id="fBtn" type="button" aria-expanded="false" aria-controls="moreF">${icon('filter')} Filters<span class="count" id="fN" hidden></span></button>
+      <div class="more-filters" id="moreF">
       <select class="date-in" id="pay" aria-label="Payment filter">
         <option value="">All payments</option>
         <option value="cod_due" ${filters.payment === 'cod_due' ? 'selected' : ''}>COD to collect</option>
@@ -25,6 +28,7 @@ export async function render(el, ctx) {
       <input class="date-in" type="date" id="from" value="${esc(filters.from)}" aria-label="From date">
       <input class="date-in" type="date" id="to" value="${esc(filters.to)}" aria-label="To date">
       <button class="btn btn-ghost btn-sm" id="reset">Reset</button>
+      </div>
     </div>
     <div id="results">${loading()}</div>`;
 
@@ -44,7 +48,7 @@ export async function render(el, ctx) {
     btn.disabled = false; btn.innerHTML = label;
   });
 
-  const counts = await api('/api/admin/stats').then((s) => s.by_status).catch(() => ({}));
+  const counts = await getStats().then((s) => s.by_status).catch(() => ({}));
   if (!ctx.isCurrent()) return;
   const totalAll = Object.values(counts).reduce((a, b) => a + b, 0);
   const chips = el.querySelector('#statusChips');
@@ -60,13 +64,20 @@ export async function render(el, ctx) {
   });
 
   const results = el.querySelector('#results');
+  // phones: payment and date filters fold behind the Filters button, which shows how many are set
+  const moreF = el.querySelector('#moreF'), fBtn = el.querySelector('#fBtn');
+  const markFilters = () => { const n = [filters.payment, filters.from, filters.to].filter(Boolean).length; const b = el.querySelector('#fN'); b.textContent = n; b.hidden = !n; };
+  fBtn.addEventListener('click', () => { const open = !moreF.classList.contains('open'); moreF.classList.toggle('open', open); fBtn.setAttribute('aria-expanded', String(open)); });
+  markFilters();
   const load = async () => {
+    markFilters();
     results.innerHTML = loading();
     try {
       const d = await api('/api/admin/orders', { query: filters });
       if (!ctx.isCurrent()) return;
       results.innerHTML = table(d);
       results.querySelectorAll('tr[data-href]').forEach((tr) => tr.addEventListener('click', () => { location.hash = tr.dataset.href; }));
+      moreOnScroll(results, { d, noun: 'orders', items: (p) => p.orders, key: (o) => o.order_no, card: orderCard, fetchPage: (page) => api('/api/admin/orders', { query: { ...filters, page } }) });
       results.querySelector('[data-prev]')?.addEventListener('click', () => { filters.page--; load(); });
       results.querySelector('[data-next]')?.addEventListener('click', () => { filters.page++; load(); });
     } catch (e) { results.innerHTML = errorBox(e); }
@@ -94,12 +105,9 @@ function table(d) {
       <td>${statusPill(o.status)}</td>
       <td>${paymentPill(o)}<small>${o.payment_method === 'cod' ? 'Cash on Delivery' : 'Online'}</small></td>
       <td class="num"><b>${inr(o.total)}</b></td></tr>`).join('');
-  const cards = d.orders.map((o) => `<a class="list-card" href="#/orders/${esc(o.order_no)}">
-      <div class="top"><b class="mono">${esc(o.order_no)}</b>${statusPill(o.status)}</div>
-      <div class="meta"><span>${esc(o.customer_name)} · ${esc(o.city)}</span><b style="color:var(--ink)">${inr(o.total)}</b></div>
-      <div class="meta"><span>${esc(timeAgo(o.created_at))}</span>${paymentPill(o)}</div></a>`).join('');
+  const cards = d.orders.map(orderCard).join('');
   return `<div class="table-wrap responsive"><table><thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Status</th><th>Payment</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="list-cards">${cards}</div>
+    <div class="list-cards o-list">${cards}</div>
     <div class="pager"><span>${d.total} order${d.total === 1 ? '' : 's'} · page ${d.page} of ${pages}</span>
       <span style="display:flex;gap:8px"><button class="btn btn-line btn-sm" data-prev ${d.page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn btn-line btn-sm" data-next ${d.page >= pages ? 'disabled' : ''}>Next</button></span></div>`;
 }

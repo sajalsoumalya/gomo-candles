@@ -1,4 +1,5 @@
 import { HttpError, json, readJson } from './util.js';
+import { db } from './db.js';
 import { requireAdmin, requireArea, adminEmails } from './auth.js';
 import { adminListStaff, adminSaveStaff, adminRemoveStaff, adminDeclineRequest, adminListRoles, adminSaveRole, adminDeleteRole } from './staff.js';
 import { adminListCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon } from './coupons.js';
@@ -30,6 +31,7 @@ import { runBackup, adminBackupStatus, adminDownloadBackup } from './backup.js';
 import { adminCheckIntegrations } from './health.js';
 import { adminUploadFile, adminListFiles, adminUpdateFile, adminDeleteFile } from './files.js';
 import { checkPayment, adminCheckPayment, adminProcessRefund, adminRefreshRefund, pollRefunds } from './refunds.js';
+import { adminBookShipment, adminSyncShipment, adminCancelShipment, adminListPickups, courierWebhook, pollShipments } from './shiprocket.js';
 
 const ORDER_NO = '(GM-\\d{6}-\\d{4})';
 const ID = '([a-z0-9-]{1,64})';
@@ -41,18 +43,45 @@ const VARIANT = '(original|web|thumb)';
 // Public catalog: the same for every visitor, so it is built at most once every CATALOG_TTL_MS per Worker instance
 // (and concurrent requests share one build). Orders never use this copy: they re-read prices and stock live.
 const CATALOG_TTL_MS = 15000;
-let catalogMemo = null; // { at, promise }
+let catalogMemo = null; // { at, v, promise }
 function cachedCatalog(env, now = Date.now()) {
   if (catalogMemo && now - catalogMemo.at < CATALOG_TTL_MS) return catalogMemo.promise;
-  const memo = { at: now, promise: getPublicCatalog(env) };
+  const memo = { at: now, v: 0, promise: null };
+  // the change stamp is read before building, so `version` is never newer than the data it labels
+  memo.promise = (async () => {
+    memo.v = Number(await db(env).get('changes/catalog').catch(() => 0)) || 0;
+    return { ...(await getPublicCatalog(env)), version: memo.v };
+  })();
   memo.promise.catch(() => { if (catalogMemo === memo) catalogMemo = null; }); // never keep a failure
   catalogMemo = memo;
+  return memo.promise;
+}
+// ?v=<stamp> from /api/changes asks for a catalog at least that new; capped at the real stamp so a made-up v can't
+// force a rebuild on every request.
+async function catalogFor(env, want) {
+  if (want > 0 && catalogMemo) {
+    await catalogMemo.promise.catch(() => {});
+    const real = Number((await cachedChanges(env)).catalog) || 0;
+    if (catalogMemo && catalogMemo.v < Math.min(want, real)) catalogMemo = null;
+  }
+  return cachedCatalog(env);
+}
+
+// Live updates: changes/<topic> = time of the last write (see db.js). Polled by open admin and shop pages, so it
+// is read at most every 2 s per Worker instance.
+let changesMemo = null;
+function cachedChanges(env, now = Date.now()) {
+  if (changesMemo && now - changesMemo.at < 2000) return changesMemo.promise;
+  const memo = { at: now, promise: db(env).get('changes').then((v) => v || {}) };
+  memo.promise.catch(() => { if (changesMemo === memo) changesMemo = null; });
+  changesMemo = memo;
   return memo.promise;
 }
 
 const routes = [
   ['GET', '/api/health', () => json({ ok: true })],
-  ['GET', '/api/catalog', async ({ env }) => json(await cachedCatalog(env), 200, { 'cache-control': 'public, max-age=30' })],
+  ['GET', '/api/catalog', async ({ env, url }) => json(await catalogFor(env, Number(url.searchParams.get('v')) || 0), 200, { 'cache-control': 'public, max-age=30' })],
+  ['GET', '/api/changes', async ({ env }) => { const c = await cachedChanges(env); return json({ catalog: Number(c.catalog) || 0, settings: Number(c.settings) || 0 }, 200, { 'cache-control': 'no-store' }); }],
   ['GET', '/api/states', () => json({ states: INDIAN_STATES }, 200, { 'cache-control': 'public, max-age=86400' })],
   ['POST', '/api/coupons/check', ({ request, env }) => checkCoupon(request, env)],
   ['POST', '/api/orders', ({ request, env, ctx }) => createOrder(request, env, ctx)],
@@ -63,6 +92,8 @@ const routes = [
   ['POST', `/api/orders/${ORDER_NO}/cancel`, ({ request, env, ctx, m }) => customerCancelOrder(request, env, ctx, m[1])],
   ['GET', '/api/track', ({ request, env }) => trackOrder(request, env)],
   ['POST', '/api/razorpay/webhook', ({ request, env, ctx }) => razorpayWebhook(request, env, ctx)],
+  // Shiprocket tracking webhook (its URL may not contain "shiprocket", "sr" or "kr")
+  ['POST', '/api/courier/webhook', ({ request, env, ctx }) => courierWebhook(request, env, ctx)],
 
   // customer sign-in by mobile OTP (public) and account (signed in; each handler authenticates itself)
   ['POST', '/api/auth/otp/start', ({ request, env }) => otpLoginStart(request, env)],
@@ -88,6 +119,7 @@ const routes = [
   ['GET', '/api/geo/pincode/([1-9]\\d{5})', ({ request, env, customer, m }) => geoPincode(request, env, customer.uid, m[1]), 'customer'],
 
   ['GET', '/api/admin/me', ({ admin }) => json({ admin }), 'admin'],
+  ['GET', '/api/admin/changes', async ({ env }) => json({ changes: await cachedChanges(env) }, 200, { 'cache-control': 'no-store' }), 'admin'],
   ['GET', '/api/admin/stats', ({ env }) => adminStats(env), 'admin'],
   ['GET', '/api/admin/products', ({ env }) => adminListProducts(env), 'admin'],
   ['POST', '/api/admin/products', async ({ request, env }) => adminCreateProduct(env, await readJson(request)), 'admin'],
@@ -150,6 +182,11 @@ const routes = [
   ['POST', `/api/admin/orders/${ORDER_NO}/check-payment`, ({ env, ctx, m, admin }) => adminCheckPayment(env, ctx, m[1], admin), 'admin'],
   ['POST', `/api/admin/orders/${ORDER_NO}/refund`, ({ request, env, m, admin }) => adminProcessRefund(request, env, m[1], admin), 'admin'],
   ['POST', `/api/admin/orders/${ORDER_NO}/refund/refresh`, ({ env, m, admin }) => adminRefreshRefund(env, m[1], admin), 'admin'],
+  // Shiprocket: book the courier pickup from the order page
+  ['POST', `/api/admin/orders/${ORDER_NO}/shiprocket/book`, ({ request, env, m, admin }) => adminBookShipment(request, env, m[1], admin), 'admin'],
+  ['POST', `/api/admin/orders/${ORDER_NO}/shiprocket/sync`, ({ env, m, admin }) => adminSyncShipment(env, m[1], admin), 'admin'],
+  ['POST', `/api/admin/orders/${ORDER_NO}/shiprocket/cancel`, ({ env, m, admin }) => adminCancelShipment(env, m[1], admin), 'admin'],
+  ['GET', '/api/admin/shiprocket/pickups', ({ env }) => adminListPickups(env), 'admin'],
   ['GET', '/api/admin/storage', ({ env }) => adminStorageStats(env), 'admin'],
   ['POST', '/api/admin/storage/test', ({ env }) => adminTestStorage(env), 'admin'],
   ['POST', '/api/admin/storage/cleanup', async ({ env }) => json({ summary: await runCleanup(env, { sweep: true }) }), 'admin'],
@@ -227,6 +264,8 @@ export async function scheduled(event, env, ctx) {
   ctx.waitUntil(runCleanup(env).then((s) => console.log('media cleanup', JSON.stringify(s))).catch((e) => console.error('cleanup failed', e?.stack || e)));
   // Unpaid online orders: release their stock and coupon after UNPAID_HOLD_MIN minutes.
   ctx.waitUntil(expireUnpaidOrders(env, { ctx }).then((s) => { if (s.expired.length) console.log('expired unpaid', JSON.stringify(s)); }).catch((e) => console.error('expire unpaid failed', e?.stack || e)));
+  // Shiprocket shipments not updated for 2 hours: fetch tracking (backup for the webhook).
+  ctx.waitUntil(pollShipments(env).then((s) => { if (s.moved.length) console.log('shipments', JSON.stringify(s)); }).catch((e) => console.error('shipment poll failed', e?.stack || e)));
   // Refunds started from the admin: mark them Refunded once Razorpay has finished (backup for the webhook).
   ctx.waitUntil(pollRefunds(env).then((s) => { if (s.done.length) console.log('refunds', JSON.stringify(s)); }).catch((e) => console.error('refund poll failed', e?.stack || e)));
   // Daily backup: the cron runs every 30 min; runBackup only does work once per IST day.

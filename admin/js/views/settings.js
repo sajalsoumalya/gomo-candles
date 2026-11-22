@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { API_BASE } from '../firebase-config.js';
 import { esc, EVENT_LABELS, loading, icon, toast, busy, showFieldErrors, openDialog } from '../ui.js';
 
 // Each settings page has its own address (#/settings/<page>) and its own permission (see worker/src/staff.js).
@@ -45,6 +46,7 @@ function draw(el, d) {
           ${integ('Bulk SMS', ig.sms, 'SMS_API_KEY + provider in Sign-in & SMS', 'sms')}
           ${integ('Photo storage (RustFS)', ig.s3, 'S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY', 's3')}
           ${integ('Bot protection', ig.turnstile, 'TURNSTILE_SECRET (optional)', 'turnstile')}
+          ${integ('Shiprocket (courier pickups)', ig.shiprocket, 'SHIPROCKET_EMAIL, SHIPROCKET_PASSWORD', 'shiprocket')}
           <p class="muted" style="font-size:.78rem;margin-top:10px">Secrets live in <code>worker/.secrets</code> and are uploaded with <code>npm run deploy</code> — never stored here.</p>
         </div>
         <div class="card"><h3>Send a test</h3>
@@ -78,6 +80,52 @@ function draw(el, d) {
       toast(result.status === 'sent' ? 'Test message sent' : `${result.status}: ${result.error}`, result.status === 'sent' ? 'ok' : 'err');
     } catch (err) { toast(err.message, 'err'); }
     busy(btn, false);
+  });
+}
+
+// Settings → Shipping → Shiprocket: pickup address, default parcel, automatic status updates.
+function shiprocketSettings(p, d, save) {
+  const sr = d.settings.shiprocket || {};
+  const ready = d.integrations?.shiprocket;
+  const v = (x) => (x == null ? '' : esc(x));
+  const hook = `${API_BASE}/api/courier/webhook`;
+  p.insertAdjacentHTML('beforeend', `<form class="card form" id="srSet" novalidate style="margin-top:16px"><h3>Shiprocket pickups</h3>
+    ${ready ? '' : `<div class="alert warn" style="margin:0">Not connected yet. In Shiprocket go to <b>Settings → API → Add New API User</b> (use an email different from your login), then add its email and password to the server as <code>SHIPROCKET_EMAIL</code> and <code>SHIPROCKET_PASSWORD</code>. You can fill these settings in now.</div>`}
+    <div class="form-row">
+      <div class="field" data-field="pickup_location"><label for="srPl">Pickup address</label>
+        <select id="srPl"><option value="">${ready ? 'Loading your Shiprocket addresses…' : 'Your primary Shiprocket address'}</option>${sr.pickup_location ? `<option value="${v(sr.pickup_location)}" selected>${v(sr.pickup_location)}</option>` : ''}</select>
+        <div class="hint" id="srPlHint">Where the courier collects parcels. Add or edit addresses in Shiprocket → Settings → Pickup Addresses.</div></div>
+      <div class="field" data-field="courier_id"><label for="srCi">Courier id <i>(optional)</i></label><input id="srCi" type="number" min="0" value="${sr.courier_id ? v(sr.courier_id) : ''}" placeholder="Shiprocket picks" inputmode="numeric"><div class="hint">Empty = Shiprocket's choice (your courier priority in Shiprocket).</div></div>
+    </div>
+    <h4 style="margin:6px 0 -4px">Default parcel <span class="muted" style="font-weight:400">(editable on each order)</span></h4>
+    <div class="form-row three" style="grid-template-columns:repeat(4,1fr)">
+      <div class="field" data-field="weight_kg"><label for="srWk">Weight (kg)</label><input id="srWk" type="number" step="0.01" min="0.01" value="${v(sr.weight_kg)}" inputmode="decimal"></div>
+      <div class="field" data-field="length_cm"><label for="srLc">Length (cm)</label><input id="srLc" type="number" step="0.5" min="0.5" value="${v(sr.length_cm)}" inputmode="decimal"></div>
+      <div class="field" data-field="breadth_cm"><label for="srBc">Breadth (cm)</label><input id="srBc" type="number" step="0.5" min="0.5" value="${v(sr.breadth_cm)}" inputmode="decimal"></div>
+      <div class="field" data-field="height_cm"><label for="srHc">Height (cm)</label><input id="srHc" type="number" step="0.5" min="0.5" value="${v(sr.height_cm)}" inputmode="decimal"></div>
+    </div>
+    <label class="switch"><input type="checkbox" id="srAuto" ${sr.auto_status !== false ? 'checked' : ''}><i></i>Move orders to Shipped / Out for delivery / Delivered from courier updates</label>
+    <label class="switch"><input type="checkbox" id="srNotify" ${sr.notify_customer !== false ? 'checked' : ''}><i></i>Message the customer when a courier update moves their order</label>
+    <div class="alert info" style="margin:0"><b>Instant tracking updates (optional):</b> in Shiprocket → Settings → API → Webhooks, add <code>${esc(hook)}</code>${d.integrations?.shiprocket_webhook ? ' with the same token as <code>SHIPROCKET_WEBHOOK_TOKEN</code>' : ''}. Without it, tracking is refreshed every 2 hours.</div>
+    <div><button class="btn btn-primary" type="submit">Save Shiprocket settings</button></div></form>`);
+  const f = p.querySelector('#srSet');
+  const sel = f.querySelector('#srPl');
+  if (ready) {
+    api('/api/admin/shiprocket/pickups').then(({ pickups }) => {
+      const active = pickups.filter((x) => x.active);
+      sel.innerHTML = `<option value="">Primary address${active.find((x) => x.primary) ? ` (${esc(active.find((x) => x.primary).name)})` : ''}</option>` +
+        active.map((x) => `<option value="${esc(x.name)}" ${x.name === sr.pickup_location ? 'selected' : ''}>${esc(x.name)} — ${esc([x.city, x.pincode].filter(Boolean).join(' '))}</option>`).join('');
+      if (!active.length) f.querySelector('#srPlHint').innerHTML = '<b>No active pickup address in Shiprocket yet.</b> Add one in Shiprocket → Settings → Pickup Addresses (and verify its phone).';
+    }).catch((e) => { f.querySelector('#srPlHint').textContent = e.message; sel.querySelector('option').textContent = 'Your primary Shiprocket address'; });
+  }
+  f.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const val = (id) => f.querySelector(id).value;
+    save('shiprocket', {
+      pickup_location: sel.value, courier_id: val('#srCi') === '' ? 0 : Number(val('#srCi')),
+      weight_kg: Number(val('#srWk')), length_cm: Number(val('#srLc')), breadth_cm: Number(val('#srBc')), height_cm: Number(val('#srHc')),
+      auto_status: f.querySelector('#srAuto').checked, notify_customer: f.querySelector('#srNotify').checked,
+    }, f.querySelector('[type=submit]'), f);
   });
 }
 
@@ -116,7 +164,7 @@ function panel(p, d, root) {
     } catch (e) {
       busy(btn, false);
       if (e.data?.fields) {
-        const fields = Object.fromEntries(Object.entries(e.data.fields).map(([k, v]) => [k.replace(/^(otp|sms|store|shipping|payments|notify|invoice)\./, '').replace('custom.', 'custom_'), v]));
+        const fields = Object.fromEntries(Object.entries(e.data.fields).map(([k, v]) => [k.replace(/^(otp|sms|store|shipping|payments|notify|invoice|shiprocket)\./, '').replace('custom.', 'custom_'), v]));
         showFieldErrors(form, fields);
       }
       toast(e.message, 'err');
@@ -171,6 +219,7 @@ function panel(p, d, root) {
       e.preventDefault();
       save('shipping', { fee: Number(val('#sf') || 0), free_above: val('#sa') === '' ? null : Number(val('#sa')), include_equal: f.querySelector('#si').checked, prepaid_fee: val('#spp') === '' ? null : Number(val('#spp')) }, f.querySelector('[type=submit]'), f);
     });
+    shiprocketSettings(p, d, save);
   }
 
   if (tab === 'payments') {

@@ -68,6 +68,9 @@ export const DEFAULT_SETTINGS = {
   templates: DEFAULT_TEMPLATES,
   otp: { whatsapp_first: true, sms_fallback: true, daily_sms_cap: 300, message: DEFAULT_OTP_MESSAGE, turnstile_site_key: '' },
   sms: { provider: 'none', sender_id: '', template_id: '', var_name: 'otp', custom: { url: '', method: 'POST', headers: '', body: '', success_match: '' } },
+  // Shiprocket pickups (secrets SHIPROCKET_EMAIL / SHIPROCKET_PASSWORD). Parcel values are the defaults shown on each
+  // order; courier_id 0 = let Shiprocket pick (your courier priority in Shiprocket → Settings → Courier).
+  shiprocket: { pickup_location: '', weight_kg: 0.5, length_cm: 15, breadth_cm: 12, height_cm: 10, courier_id: 0, auto_status: true, notify_customer: true },
 };
 
 export const SMS_PROVIDER_IDS = ['none', 'msg91', 'fast2sms', '2factor', 'custom'];
@@ -104,6 +107,8 @@ export function integrations(env) {
     turnstile: Boolean(env.TURNSTILE_SECRET),
     s3: Boolean(env.S3_ENDPOINT && env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY),
     s3_public: Boolean(env.S3_PUBLIC_URL),
+    shiprocket: Boolean(env.SHIPROCKET_EMAIL && env.SHIPROCKET_PASSWORD),
+    shiprocket_webhook: Boolean(env.SHIPROCKET_WEBHOOK_TOKEN),
   };
 }
 
@@ -136,6 +141,22 @@ export function validateSettingsInput(body, env, current) {
     if (prepaid_fee != null && (!Number.isInteger(prepaid_fee) || prepaid_fee < 0 || prepaid_fee > 5000)) fields['shipping.prepaid_fee'] = 'Whole rupees, 0–5000, or empty.';
     // the database drops nulls (and the default would come back), so "never free" is stored as -1
     out.shipping = { free_above: free_above ?? -1, fee, include_equal: Boolean(body.shipping.include_equal), prepaid_fee };
+  }
+
+  if (body.shiprocket) {
+    const sr = body.shiprocket;
+    const n = (k) => Number(sr[k]);
+    const weight_kg = n('weight_kg'), length_cm = n('length_cm'), breadth_cm = n('breadth_cm'), height_cm = n('height_cm');
+    if (!(weight_kg > 0 && weight_kg <= 50)) fields['shiprocket.weight_kg'] = 'Kilograms, more than 0 and up to 50.';
+    for (const [k, v] of [['length_cm', length_cm], ['breadth_cm', breadth_cm], ['height_cm', height_cm]]) {
+      if (!(v >= 0.5 && v <= 300)) fields[`shiprocket.${k}`] = 'Centimetres, 0.5 to 300.';
+    }
+    const courier_id = sr.courier_id === '' || sr.courier_id == null ? 0 : Number(sr.courier_id);
+    if (!Number.isInteger(courier_id) || courier_id < 0) fields['shiprocket.courier_id'] = 'A Shiprocket courier id, or empty.';
+    out.shiprocket = {
+      pickup_location: str(sr.pickup_location, 120), weight_kg: Math.round(weight_kg * 1000) / 1000, length_cm, breadth_cm, height_cm,
+      courier_id, auto_status: sr.auto_status !== false, notify_customer: sr.notify_customer !== false,
+    };
   }
 
   if (body.payments) {

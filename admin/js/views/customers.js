@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { esc, inr, fmtDate, timeAgo, statusPill, loading, errorBox, icon, toast, busy, debounce, confirmDialog } from '../ui.js';
+import { esc, inr, fmtDate, timeAgo, statusPill, loading, errorBox, icon, toast, busy, debounce, confirmDialog, initials, moreOnScroll } from '../ui.js';
 
 const filters = { q: '', filter: '', via: '', page: 1 };
 const FILTERS = [['', 'All'], ['phone_unverified', 'Mobile not verified'], ['whatsapp_pending', 'WhatsApp to confirm'], ['email_unverified', 'Email not confirmed'], ['no_email', 'No email'], ['disabled', 'Disabled']];
@@ -42,6 +42,7 @@ export async function render(el, ctx) {
       if (!ctx.isCurrent()) return;
       res.innerHTML = list(d);
       res.querySelectorAll('tr[data-href]').forEach((tr) => tr.addEventListener('click', () => { location.hash = tr.dataset.href; }));
+      moreOnScroll(res, { d, noun: 'customers', items: (p) => p.customers, key: (c) => c.uid, card: custCard, fetchPage: (page) => api('/api/admin/customers', { query: { ...filters, page } }) });
       res.querySelector('[data-prev]')?.addEventListener('click', () => { filters.page--; load(); });
       res.querySelector('[data-next]')?.addEventListener('click', () => { filters.page++; load(); });
     } catch (e) { res.innerHTML = errorBox(e); }
@@ -49,6 +50,13 @@ export async function render(el, ctx) {
   el.querySelector('#q').addEventListener('input', debounce((e) => { filters.q = e.target.value.trim(); filters.page = 1; load(); }, 350));
   el.querySelector('#via').addEventListener('change', (e) => { filters.via = e.target.value; filters.page = 1; load(); });
   load();
+}
+
+function custCard(c) {
+  return `<a class="list-card cu-card" href="#/customers/${esc(c.uid)}"><span class="o-av" aria-hidden="true">${esc(initials(c.name || c.email || ''))}</span><span class="cu-body">
+      <div class="top"><b>${esc(c.name || c.email || ('+91 ' + (c.phone || '')))}</b>${c.disabled ? '<span class="pill failed">Disabled</span>' : ''}</div>
+      <div class="meta"><span>${c.phone ? '+91 ' + esc(c.phone) : 'No mobile'}${c.email ? ' · ' + esc(c.email) : ''}</span></div>
+      <div class="vchips">${badges(c)}</div></span></a>`;
 }
 
 function list(d) {
@@ -60,10 +68,7 @@ function list(d) {
       <td><div class="vchips">${badges(c)}</div></td>
       <td>${c.has_orders ? 'Yes' : '<span class="muted">No</span>'}</td>
       <td class="num"><small>${c.last_login_at ? 'Seen ' + esc(timeAgo(c.last_login_at)) : ''}</small></td></tr>`).join('');
-  const cards = d.customers.map((c) => `<a class="list-card" href="#/customers/${esc(c.uid)}">
-      <div class="top"><b>${esc(c.name || c.email || ('+91 ' + (c.phone || '')))}</b>${c.disabled ? '<span class="pill failed">Disabled</span>' : ''}</div>
-      <div class="meta"><span>${c.phone ? '+91 ' + esc(c.phone) : 'No mobile'}${c.email ? ' · ' + esc(c.email) : ''}</span></div>
-      <div class="vchips">${badges(c)}</div></a>`).join('');
+  const cards = d.customers.map(custCard).join('');
   return `<div class="table-wrap responsive"><table><thead><tr><th>Customer</th><th>Contact</th><th>Verified</th><th>Orders</th><th class="num">Last seen</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="list-cards">${cards}</div>
     <div class="pager"><span>${d.total} customer${d.total === 1 ? '' : 's'} · page ${d.page} of ${pages}</span>

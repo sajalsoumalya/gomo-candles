@@ -11,6 +11,7 @@ import { otpChannels } from './otp.js';
 import { evaluateCoupon, claimCoupon, releaseCoupon } from './coupons.js';
 import { stockNeeds, reserveStock, releaseStock } from './stock.js';
 import { refundReviewFields, reconcilePayment, refundWebhook } from './refunds.js';
+import { shiprocketReady } from './shiprocket.js';
 
 const ORDER_LIMIT_PER_HOUR = 10;      // per signed-in account
 const ORDER_IP_LIMIT_PER_HOUR = 60;   // per IP: mobile networks put many customers behind one address
@@ -533,7 +534,10 @@ export async function adminGetOrder(env, orderNo) {
   const log = (await db(env).get('notifications', { orderBy: 'order_no', equalTo: orderNo })) || {};
   const notifications = Object.entries(log).map(([id, n]) => ({ id, ...n, html: undefined, body: undefined }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  return json({ order: found.order, items: found.items, events: found.events, notifications, payment_label: paymentLabel(found.order) });
+  // Shiprocket card on the order page: is it connected, and the default parcel (staff may not open Settings)
+  const sr = (await getSettings(env)).shiprocket;
+  const shipping = { ready: shiprocketReady(env), parcel: { weight_kg: sr.weight_kg, length_cm: sr.length_cm, breadth_cm: sr.breadth_cm, height_cm: sr.height_cm } };
+  return json({ order: found.order, items: found.items, events: found.events, notifications, payment_label: paymentLabel(found.order), shipping });
 }
 
 const LOCKED_FOR_CANCEL = ['shipped', 'out_for_delivery', 'delivered'];

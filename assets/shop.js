@@ -992,21 +992,13 @@
     return { lines: lines, subtotal: subtotal, savings: Math.max(0, compare - subtotal), shipping: shipping, total: subtotal + shipping };
   }
 
-  // shipping per payment method, when they differ (else null): { cod, online }
-  function shipChoice(t) {
-    if (!t.subtotal || !(catalog.payments && catalog.payments.cod && catalog.payments.razorpay)) return null;
-    var cod = totals('cod').shipping, online = totals('razorpay').shipping;
-    return cod === online ? null : { cod: cod, online: online };
-  }
+  // pending = cart drawer and checkout steps 1-2: items only, no shipping (that is shown on the Payment step)
   function summaryRows(t, pending) {
-    var ch = pending ? shipChoice(t) : null;
-    if (ch) {
-      var items = t.subtotal - (t.discount || 0);
+    if (pending) {
       return '<div class="sum-row"><span>Subtotal</span><span>' + inr(t.subtotal) + '</span></div>' +
         (t.savings ? '<div class="sum-row save"><span>You save</span><span>− ' + inr(t.savings) + '</span></div>' : '') +
-        '<div class="sum-row ship-choice"><span>Shipping</span><span>Chosen at payment</span></div>' +
-        '<div class="ship-opts"><span>Pay online: <b>' + (ch.online ? inr(ch.online) : 'Free') + '</b></span><span>Cash on Delivery: <b>' + (ch.cod ? inr(ch.cod) : 'Free') + '</b></span></div>' +
-        '<div class="sum-row total"><span>Total</span><span>' + inr(items) + ' <small class="plus-ship">+ shipping</small></span></div>';
+        (t.discount ? '<div class="sum-row save"><span>Coupon ' + esc(t.coupon) + '</span><span>− ' + inr(t.discount) + '</span></div>' : '') +
+        '<div class="sum-row total"><span>Total</span><span>' + inr(t.subtotal - (t.discount || 0)) + '</span></div>';
     }
     return '<div class="sum-row"><span>Subtotal</span><span>' + inr(t.subtotal) + '</span></div>' +
       (t.savings ? '<div class="sum-row save"><span>You save</span><span>− ' + inr(t.savings) + '</span></div>' : '') +
@@ -1042,18 +1034,10 @@
           (l.nudge ? '<button type="button" data-addunits="' + l.nudge.add + '">' + esc(l.nudge.text) + '</button>' : '') + '</div>' : '') +
       '</div>';
     }).join('');
-    var s = catalog.shipping || {};
-    var progress = '';
-    if (s.fee && t.subtotal > 0 && s.free_above != null) {
-      var need = (s.include_equal ? s.free_above : s.free_above + 1) - t.subtotal;
-      var pct = Math.min(100, Math.round(t.subtotal / Math.max(1, s.free_above) * 100));
-      progress = '<div class="ship-progress">' + (need > 0 ? 'Add ' + inr(need) + ' more for free shipping' : 'You have unlocked free shipping') + '<div class="bar"><i style="width:' + pct + '%"></i></div></div>';
-    }
     var anyBad = t.lines.some(function (l) { return !l.ok; });
-    var choice = shipChoice(t);
-    foot.innerHTML = progress + summaryRows(t, true) +
-      '<button type="button" class="btn btn-rust btn-block" id="toCheckout"' + (anyBad || !t.subtotal ? ' disabled' : '') + '>Checkout · ' + inr(choice ? t.subtotal : t.total) + ' ' + ARROW + '</button>' +
-      '<p class="muted-note">' + (anyBad ? 'Remove unavailable items to continue.' : [catalog.payments && catalog.payments.cod ? 'Cash on Delivery available' : '', shipNote()].filter(Boolean).join(' · ')) + '</p>';
+    foot.innerHTML = summaryRows(t, true) +
+      '<button type="button" class="btn btn-rust btn-block" id="toCheckout"' + (anyBad || !t.subtotal ? ' disabled' : '') + '>Checkout · ' + inr(t.subtotal) + ' ' + ARROW + '</button>' +
+      (anyBad ? '<p class="muted-note">Remove unavailable items to continue.</p>' : '');
   }
 
   // ------------------------------------------------------------------ overlay / panels
@@ -1101,7 +1085,7 @@
     var saved = store(DETAILS_KEY) || {};
     return {
       name: (p && p.name) || saved.name || '', phone: (p && p.phone) || saved.phone || '', line1: '', line2: '', landmark: '', city: '', state: '', pincode: '', lat: null, lng: null, accuracy: null,
-      notes: '', payment_method: catalog.payments.cod ? 'cod' : 'razorpay'
+      notes: '', payment_method: catalog.payments.razorpay || !catalog.payments.cod ? 'razorpay' : 'cod'
     };
   }
 
@@ -1122,6 +1106,7 @@
       addr: def ? def.id : 'new', saveAddr: addrs.length < 5 };
     if (!ck.values.name) ck.values.name = p.name || (def && def.name) || '';
     if (!catalog.payments.cod && ck.values.payment_method === 'cod') ck.values.payment_method = 'razorpay';
+    if (!catalog.payments.razorpay && ck.values.payment_method === 'razorpay' && catalog.payments.cod) ck.values.payment_method = 'cod';
     renderCheckout();
     open($('#checkoutModal'));
   }
@@ -1271,9 +1256,9 @@
       } else {
         var v = ck.values;
         var opts = [];
-        if (catalog.payments.cod) opts.push(['cod', 'Cash on Delivery', 'Pay in cash or UPI when your order arrives.']);
-        if (catalog.payments.razorpay) { var pr = prepaidRule(), pt = pr ? totals('razorpay').shipping : null, ct = totals('cod').shipping;
-          opts.push(['razorpay', 'Pay online' + (pr && pt < ct ? (pt === 0 ? ' · Free delivery' : ' · Delivery ' + inr(pt)) : ''), 'UPI, cards, net banking and wallets via Razorpay.']); }
+        var deliv = function (n) { return n ? ' · Delivery ' + inr(n) : ' · Free delivery'; };
+        if (catalog.payments.razorpay) opts.push(['razorpay', 'Pay online' + deliv(totals('razorpay').shipping), 'UPI, cards, net banking and wallets via Razorpay.']);
+        if (catalog.payments.cod) opts.push(['cod', 'Cash on Delivery' + deliv(totals('cod').shipping), 'Pay in cash or UPI when your order arrives.']);
         form = '<div class="pay-opts" role="radiogroup" aria-label="Payment method">' + opts.map(function (o) {
           return '<label class="pay-opt' + (v.payment_method === o[0] ? ' on' : '') + '"><input type="radio" name="payment_method" value="' + o[0] + '"' + (v.payment_method === o[0] ? ' checked' : '') + '>' +
             '<span><b>' + o[1] + '</b><small>' + o[2] + '</small></span></label>';
@@ -1287,7 +1272,7 @@
       var next = ck.step < 3
         ? '<button type="button" class="btn btn-rust" data-ck="next">Continue ' + ARROW + '</button>'
         : '<button type="button" class="btn btn-rust" data-ck="place"' + (ck.busy ? ' disabled' : '') + '>' +
-          (ck.busy ? '<span class="spinner"></span> Placing order…' : (ck.values.payment_method === 'razorpay' ? 'Pay ' + inr(t.total) : 'Place order · ' + inr(t.total))) + '</button>';
+          (ck.busy ? '<span class="spinner"></span> ' + (ck.values.payment_method === 'razorpay' ? 'Opening payment…' : 'Placing order…') : (ck.values.payment_method === 'razorpay' ? 'Pay now · ' + inr(t.total) : 'Place order · ' + inr(t.total))) + ' ' + ARROW + '</button>';
       foot = back + next + (ck.step === 3 ? '<p class="consent-note">By placing this order you agree to our <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy-policy" target="_blank" rel="noopener">Privacy policy</a>.</p>' : '');
     }
 

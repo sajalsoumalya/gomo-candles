@@ -1,5 +1,6 @@
 import { esc, icon, toast } from './ui.js';
 import { api, setAuthErrorHandler } from './api.js';
+import { getStats } from './stats.js';
 import { initAuth, isConfigured, devLoginAvailable, signInEmail, signInGoogle, resetPassword, sendVerification, reloadUser, signOut, devSignIn } from './auth.js';
 import { API_BASE } from './firebase-config.js';
 import * as dashboard from './views/dashboard.js';
@@ -58,6 +59,16 @@ const settingsNav = () => SETTINGS_TABS.filter(([, , area]) => (area === 'set_te
 const superNav = () => (isSuper() ? [['settings/team', 'Team & approvals', 'users'], ['roles', 'Roles', 'settings']] : []);
 const superNavHtml = () => (superNav().length ? `<div class="nav-group">Super admin</div>${superNav().map(([k, label, ic]) => `<a href="#/${k}" data-nav="${k === 'roles' ? 'roles' : 'settings:team'}" class="sub">${icon(ic)}<span>${esc(label)}</span>${k === 'settings/team' ? '<span class="count" data-req-count hidden></span>' : ''}</a>`).join('')}` : '');
 const visibleNav = () => NAV.filter(([k]) => allowed(k));
+// Phone menu tile (bottom sheet)
+const tile = (href, nav, ic, label, extra) => `<a href="#/${href}" data-nav="${nav}" class="tile"><span class="ti">${icon(ic)}</span><span>${esc(label)}</span>${extra}</a>`;
+// Page name shown in the phone top bar
+function titleFor(r, m) {
+  if (r.nav === 'settings') return (SETTINGS_TABS.find(([k]) => k === m[1]) || [])[1] || 'Settings';
+  if (r.view === order) return 'Order';
+  if (r.nav === 'roles') return 'Roles';
+  if (r.editor) return m[1] === 'new' ? 'New offer' : 'Edit offer';
+  return (NAV.find(([k]) => k === r.nav) || [])[1] || 'Dashboard';
+}
 
 // ------------------------------------------------------------------ auth screens
 function authShell(inner) {
@@ -163,32 +174,50 @@ function renderShell() {
     </aside>
     <div class="main">
       <header class="topbar">
-        <a class="logo" href="#/">${LOGO}<span><small>Admin</small></span></a>
-        <button class="menu-btn" id="menuBtn" aria-label="Open menu" aria-expanded="false" aria-controls="mnav">
-          <span></span><span></span><span></span><span class="count" data-new-count hidden></span></button>
+        <a class="logo" href="#/" aria-label="Dashboard">${LOGO}</a>
+        <div class="tb-title"><small>GoMo Admin</small><b id="tbTitle"></b></div>
+        <span class="tb-live" id="tbLive" title="Updates appear on their own"><i></i>Live</span>
       </header>
       <div class="mnav" id="mnav" hidden>
-        <nav>${visibleNav().map(([k, label, ic]) => `<a href="#/${k}" data-nav="${k}">${icon(ic)}<span>${label}</span>${k === 'orders' ? '<span class="count" data-new-count hidden></span>' : ''}</a>`).join('')}
-          ${superNavHtml()}
-        ${settingsNav().filter(([k]) => k !== 'team').length ? `<div class="nav-group">Settings</div>${settingsNav().filter(([k]) => k !== 'team').map(([k, label]) => `<a href="#/settings/${k}" data-nav="settings:${k}" class="sub">${icon(SETTINGS_ICON[k] || 'settings')}<span>${esc(label)}</span></a>`).join('')}` : ''}</nav>
-        <div class="mnav-foot"><span class="avatar">${avatar}</span><span class="who"><b>${esc(a.name)}</b>${esc(a.email)}</span>
-          <button class="btn btn-line btn-sm" id="signOut2">${icon('logout')} Sign out</button></div>
+        <div class="sheet" id="drawer" role="dialog" aria-modal="true" aria-label="Menu">
+          <span class="grab" aria-hidden="true"></span>
+          <div class="me"><span class="avatar">${avatar}</span><span class="who"><b>${esc(a.name)}</b><small>${esc(a.email)}</small><em class="role-tag">${esc(a.role_label || 'Super admin')}</em></span>
+            <button class="btn btn-line btn-sm" id="signOut2">${icon('logout')} Sign out</button></div>
+          <div class="nav-group">Manage</div>
+          <nav class="tiles">${visibleNav().map(([k, label, ic]) => tile(k, k, ic, label, k === 'orders' ? '<span class="count" data-new-count hidden></span>' : '')).join('')}</nav>
+          ${superNav().length ? `<div class="nav-group">Super admin</div><nav class="tiles">${superNav().map(([k, label, ic]) => tile(k, k === 'roles' ? 'roles' : 'settings:team', ic, label, k === 'settings/team' ? '<span class="count" data-req-count hidden></span>' : '')).join('')}</nav>` : ''}
+          ${settingsNav().filter(([k]) => k !== 'team').length ? `<div class="nav-group">Settings</div><nav class="tiles">${settingsNav().filter(([k]) => k !== 'team').map(([k, label]) => tile(`settings/${k}`, `settings:${k}`, SETTINGS_ICON[k] || 'settings', label, '')).join('')}</nav>` : ''}
+        </div>
       </div>
       <main class="content" id="view"></main>
     </div>
-    <nav class="tabbar">${visibleNav().filter(([k]) => ['dashboard', 'orders', 'products', 'offers'].includes(k)).map(([k, label, ic]) => `<a href="#/${k}" data-nav="${k}">${icon(ic)}${label}${k === 'orders' ? '<span class="count" data-new-count hidden></span>' : ''}</a>`).join('')}
-      <button type="button" class="tab-more" id="tabMore" aria-label="More">${icon('settings')}More</button></nav>
+    <nav class="tabbar">${visibleNav().filter(([k]) => ['dashboard', 'orders', 'products', 'offers'].includes(k)).map(([k, label, ic]) => `<a href="#/${k}" data-nav="${k}"><span class="ti">${icon(ic)}</span><span class="tl">${k === 'dashboard' ? 'Home' : label}</span>${k === 'orders' ? '<span class="count" data-new-count hidden></span>' : ''}</a>`).join('')}
+      <button type="button" class="tab-more" id="tabMore" aria-label="Open menu" aria-expanded="false" aria-controls="mnav"><span class="ti">${icon('grid')}</span><span class="tl">More</span><span class="count" data-req-count hidden></span></button></nav>
   </div><div class="slip" id="slip"></div>`;
   document.getElementById('signOut').addEventListener('click', () => signOut());
   document.getElementById('signOut2').addEventListener('click', () => signOut());
-  // mobile menu: ☰ in the top bar or "More" in the tab bar; closes on navigation, backdrop tap or Esc
-  const mnav = document.getElementById('mnav'), mbtn = document.getElementById('menuBtn');
-  const setMenu = (open) => { mnav.hidden = !open; mbtn.setAttribute('aria-expanded', String(open)); document.body.classList.toggle('menu-open', open); };
-  mbtn.addEventListener('click', () => setMenu(mnav.hidden));
-  document.getElementById('tabMore').addEventListener('click', () => setMenu(mnav.hidden));
+  // phone menu: "More" in the tab bar slides a sheet up from the bottom; it closes on navigation, backdrop tap,
+  // Esc, tapping More again or a swipe down
+  const mnav = document.getElementById('mnav'), drawer = document.getElementById('drawer');
+  const more = document.getElementById('tabMore');
+  let shutTimer = 0;
+  const setMenu = (open) => {
+    clearTimeout(shutTimer);
+    more.setAttribute('aria-expanded', String(open)); more.classList.toggle('on', open); document.body.classList.toggle('menu-open', open);
+    drawer.style.transform = '';
+    if (open) { mnav.hidden = false; requestAnimationFrame(() => requestAnimationFrame(() => mnav.classList.add('open'))); }
+    else { mnav.classList.remove('open'); shutTimer = setTimeout(() => { mnav.hidden = true; }, 260); }
+  };
+  const isOpen = () => mnav.classList.contains('open');
+  more.addEventListener('click', () => setMenu(!isOpen()));
   mnav.addEventListener('click', (e) => { if (e.target === mnav || e.target.closest('a')) setMenu(false); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !mnav.hidden) setMenu(false); });
-  window.addEventListener('hashchange', () => setMenu(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) setMenu(false); });
+  window.addEventListener('hashchange', () => { if (isOpen()) setMenu(false); });
+  // drag the sheet down to close it (only when its list is scrolled to the top)
+  let y0 = null, dy = 0;
+  drawer.addEventListener('touchstart', (e) => { y0 = drawer.scrollTop <= 0 ? e.touches[0].clientY : null; dy = 0; }, { passive: true });
+  drawer.addEventListener('touchmove', (e) => { if (y0 == null) return; dy = Math.max(0, e.touches[0].clientY - y0); if (dy) { drawer.style.transition = 'none'; drawer.style.transform = `translateY(${dy}px)`; } }, { passive: true });
+  drawer.addEventListener('touchend', () => { drawer.style.transition = ''; if (dy > 90) setMenu(false); else drawer.style.transform = ''; y0 = null; });
 }
 
 export function setNewOrders(n) {
@@ -197,7 +226,7 @@ export function setNewOrders(n) {
 }
 
 async function refreshCounts() {
-  if (hasArea('orders')) { try { const s = await api('/api/admin/stats'); setNewOrders(s.by_status.placed || 0); } catch { /* ignore */ } }
+  if (hasArea('orders')) { try { const s = await getStats(); setNewOrders(s.by_status.placed || 0); } catch { /* ignore */ } }
   if (isSuper()) {
     try { const t = await api('/api/admin/staff'); const n = (t.requests || []).length; document.querySelectorAll('[data-req-count]').forEach((b) => { b.textContent = n; b.hidden = !n; }); } catch { /* ignore */ }
   }
@@ -219,6 +248,10 @@ async function route() {
   }
   const m = path.match(r.re) || [];
   const navKey = r.nav === 'settings' ? `settings:${m[1] || ''}` : r.nav;
+  const tb = document.getElementById('tbTitle');
+  if (tb) tb.textContent = titleFor(r, m);
+  // list pages repeat the top-bar title in their heading; phones hide that copy (order/customer pages keep theirs)
+  document.body.classList.toggle('h1-dup', r.nav === 'settings' || (!m[1] && !r.editor));
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === navKey || (r.nav === 'settings' && !m[1] && a.dataset.nav.startsWith('settings:') && a === document.querySelector('[data-nav^="settings:"]'))));
   const el = document.getElementById('view');
   const seq = ++renderSeq;

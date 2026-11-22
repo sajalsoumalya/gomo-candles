@@ -16,7 +16,7 @@ export async function render(el, ctx) {
 function draw(el) {
   el.innerHTML = `
     <div class="page-head"><div><h1>Products</h1><p>Single items with their photos. Combos and packs are built from these on the Offers page.</p></div>
-      <div class="actions"><button class="btn btn-primary" id="new">${icon('plus')} New product</button></div></div>
+      <div class="actions"><button class="btn btn-primary fab" id="new">${icon('plus')} New product</button></div></div>
     ${products.length ? `<div class="prod-list">${products.map(card).join('')}</div>` : '<div class="card empty"><b>No products</b>Add your first product.</div>'}`;
 
   el.querySelector('#new').addEventListener('click', () => editDialog(null, el));
