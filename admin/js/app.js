@@ -93,7 +93,7 @@ function renderLogin(message = '') {
     document.getElementById('devForm')?.addEventListener('submit', (e) => { e.preventDefault(); devSignIn(document.getElementById('dt').value.trim()); });
     return;
   }
-  authShell(`<h2>Sign in</h2><p class="sub">Use your admin account.</p>
+  authShell(`<h2>Sign in</h2><p class="sub">Use your admin account. New to the team? Sign in with your own Google or email account, then press <b>Request access</b>.</p>
     ${message ? `<div class="alert err">${esc(message)}</div>` : ''}
     <div id="authErr"></div>
     <button type="button" class="google-btn" id="gBtn">${GOOGLE} Continue with Google</button>
@@ -138,9 +138,33 @@ function renderBlocked(err) {
       document.getElementById('vMsg').innerHTML = '<div class="alert ok">Verification email sent. Open the link, then come back here.</div>';
     });
     document.getElementById('doneV').addEventListener('click', async () => { await reloadUser(); boot(state.user); });
-  } else if (code === 'access_pending' || code === 'not_admin') {
+  } else if (code === 'not_admin') {
+    authShell(`<h2>Request access</h2><p class="sub">You're signed in as <b>${esc(err.data.email)}</b>, but you're not on the GoMo team yet.</p>
+      <div id="raMsg"></div>
+      <form class="form" id="raForm" novalidate>
+        <div class="field"><label for="raName">Your name</label><input id="raName" maxlength="80" value="${esc(err.data.name || state.user?.name || '')}" autocomplete="name"></div>
+        <div class="field"><label for="raNote">Note for the owner <i>(optional)</i></label><textarea id="raNote" maxlength="200" rows="2" placeholder="e.g. I pack the orders on weekends"></textarea></div>
+        <button class="btn btn-primary btn-block" type="submit" id="raGo">Request access</button>
+        <button class="btn btn-ghost btn-block" type="button" id="out">Sign in with another account</button>
+      </form>
+      <p class="muted" style="font-size:.8rem;margin-top:14px;line-height:1.5">The owner chooses what you can open. You'll get in as soon as they approve — just come back to this page.</p>`);
+    document.getElementById('raForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('raGo');
+      btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const r = await api('/api/admin/request-access', { method: 'POST', body: { name: document.getElementById('raName').value, note: document.getElementById('raNote').value } });
+        if (r.status === 'member') { boot(state.user); return; }
+        renderBlocked({ data: { code: 'access_pending', email: err.data.email, requested_at: r.requested_at, just_sent: true } });
+      } catch (x) {
+        if (x.data?.code === 'access_declined') { renderBlocked(x); return; }
+        document.getElementById('raMsg').innerHTML = `<div class="alert err">${esc(x.message)}</div>`;
+        btn.disabled = false; btn.textContent = 'Request access';
+      }
+    });
+  } else if (code === 'access_pending') {
     authShell(`<h2>Waiting for approval</h2><p class="sub">You're signed in as <b>${esc(err.data.email)}</b>.</p>
-      <div class="alert info">Your request has been sent to the super admin. You'll get access as soon as they approve it — no need to sign up again.</div>
+      <div class="alert ${err.data.just_sent ? 'ok' : 'info'}">${err.data.just_sent ? 'Request sent. ' : ''}The owner will see your request under Settings → Team. You'll get in as soon as they approve it — no need to ask again.</div>
       <div class="form"><button class="btn btn-primary btn-block" id="recheck">Check again</button>
       <button class="btn btn-line btn-block" id="out">Sign in with another account</button></div>`);
     document.getElementById('recheck').addEventListener('click', () => boot(state.user));

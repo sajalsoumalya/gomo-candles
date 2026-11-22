@@ -71,10 +71,15 @@ describe('Shiprocket booking: pickup address', () => {
       expect(sr.created()).toBeUndefined();
     }
   });
-  it('a server-fixed SHIPROCKET_PICKUP_LOCATION wins over the choice', async () => {
+  it('SHIPROCKET_PICKUP_LOCATION is only the default: staff can still choose another confirmed address', async () => {
     const { env } = setup(order(), { SHIPROCKET_PICKUP_LOCATION: 'Home' }); const sr = shiprocket();
     await bookShipment(env, NO, { pickup_location: 'Warehouse' }, admin, sr.f);
-    expect(sr.created().pickup_location).toBe('Home');
+    expect(sr.created().pickup_location).toBe('Warehouse');
+    const p = await prepareBooking(env, NO, shiprocket().f);
+    expect(p).toMatchObject({ default_pickup: 'Home', pickup_locked: false });
+    const { env: env2 } = setup(order(), { SHIPROCKET_PICKUP_LOCATION: 'Warehouse' }); const sr2 = shiprocket();
+    await bookShipment(env2, NO, {}, admin, sr2.f);
+    expect(sr2.created().pickup_location).toBe('Warehouse');
   });
 });
 

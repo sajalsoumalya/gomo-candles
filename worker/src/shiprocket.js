@@ -186,7 +186,7 @@ const defaultPickup = (list) => {
 /** The pickup address for a booking: the one staff picked on the order page (must be active in Shiprocket), else the default. */
 async function chosenPickup(env, cfg, wanted, f) {
   const name = String(wanted || '').trim();
-  if (!name || String(env.SHIPROCKET_PICKUP_LOCATION || '').trim()) return pickupLocation(env, cfg, f); // a server-fixed address always wins
+  if (!name) return pickupLocation(env, cfg, f); // none picked: SHIPROCKET_PICKUP_LOCATION, Settings, then the primary address
   const list = await listPickups(env, f);
   const hit = list.find((p) => p.name === name);
   if (!hit) throw new HttpError(422, `“${name}” is not a pickup address in your Shiprocket account.`, { fields: { pickup_location: 'Pick one of your Shiprocket pickup addresses.' } });
@@ -487,12 +487,13 @@ export async function prepareBooking(env, orderNo, f = fetch) {
   const cfg = settings.shiprocket;
   let pickups = [], pickups_error = null;
   try { pickups = await listPickups(env, f); } catch (e) { pickups_error = e.message; }
-  const fixedByEnv = String(env.SHIPROCKET_PICKUP_LOCATION || '').trim() || null;
+  // SHIPROCKET_PICKUP_LOCATION / Settings only choose the default; staff can pick any confirmed address
+  const serverDefault = String(env.SHIPROCKET_PICKUP_LOCATION || '').trim() || null;
   return {
     pickups,
     pickups_error,
-    default_pickup: fixedByEnv || cfg.pickup_location || defaultPickup(pickups),
-    pickup_locked: !!fixedByEnv,
+    default_pickup: serverDefault || cfg.pickup_location || defaultPickup(pickups),
+    pickup_locked: false,
     parcel: { weight_kg: cfg.weight_kg, length_cm: cfg.length_cm, breadth_cm: cfg.breadth_cm, height_cm: cfg.height_cm },
     issues: shippingIssues(order),
     states: INDIAN_STATES,

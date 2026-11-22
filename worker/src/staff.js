@@ -147,7 +147,7 @@ export async function adminRemoveStaff(env, email, admin) {
 // ------------------------------------------------------------------ access requests
 // Someone signs in to the admin panel with a verified email that isn't staff yet → a request waits for the super admin.
 
-export async function recordAccessRequest(env, claims) {
+export async function recordAccessRequest(env, claims, note = '') {
   const email = String(claims.email || '').toLowerCase();
   if (!email) return null;
   const d = db(env);
@@ -155,7 +155,7 @@ export async function recordAccessRequest(env, claims) {
   const cur = await d.get(path);
   if (cur?.status === 'declined') return cur;
   if (!cur || cur.status !== 'pending') {
-    const rec = { email, name: claims.name || '', uid: claims.sub, at: nowIso(), status: 'pending' };
+    const rec = { email, name: claims.name || '', uid: claims.sub, at: nowIso(), status: 'pending', ...(note ? { note } : {}) };
     await d.put(path, rec);
     return rec;
   }

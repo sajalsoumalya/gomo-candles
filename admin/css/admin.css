@@ -800,6 +800,19 @@ a.item-row small{display:block;color:var(--muted);font-size:.76rem;margin-top:2p
 .role-pick-add svg{width:14px;height:14px}
 .req-card{border-color:#f0d8b8;background:#fffaf3}
 .req-card .team-row select{max-width:190px;font:inherit;font-size:.84rem;border:1.5px solid var(--line);border-radius:10px;padding:7px 30px 7px 10px;background:#fff;color:var(--ink)}
+/* team: access requests (staff sign in and press Request access; the owner approves here) */
+.req-row{padding:12px 0;border-bottom:1px solid #f0dcc4;display:grid;gap:8px}
+.req-row:last-child{border-bottom:0;padding-bottom:2px}
+.req-row .team-row{padding:0;border:0}
+.req-note{display:block;margin-top:4px;font-size:.82rem;color:var(--ink-2);font-style:italic}
+.req-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-left:46px}
+.req-role{display:grid;gap:4px;max-width:320px;margin-left:46px}
+.req-role span{font-size:.72rem;font-weight:700;color:var(--muted)}
+.req-role select{font:inherit;font-size:.88rem;border:1.5px solid var(--line);border-radius:10px;padding:9px 10px;background:#fff;color:var(--ink)}
+.req-row>.hint{padding-left:46px;font-size:.76rem;color:var(--muted);margin-top:-2px}
+.req-row [data-req-areas]{padding-left:46px}
+.req-empty .quick{margin-top:12px}
+@media (max-width:640px){.req-acts,.req-row>.hint,.req-row [data-req-areas]{padding-left:0}.req-role{max-width:none;margin-left:0}.req-acts .btn{flex:1}.req-role select{font-size:16px}}
 @media (max-width:640px){.req-card .team-row{flex-wrap:wrap}.req-card .team-row .who{flex-basis:calc(100% - 50px)}}
 .bk-list{display:grid;margin-top:10px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
 .bk-row{display:flex;align-items:center;gap:14px;padding:8px 14px;border-bottom:1px solid var(--line);font-size:.86rem}
@@ -830,3 +843,10 @@ a.item-row small{display:block;color:var(--muted);font-size:.76rem;margin-top:2p
 .ship-acts{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px;border-left:2px solid var(--line);padding-left:12px}
 .ship-acts b{display:block;font-size:.82rem;font-weight:600}
 .ship-acts small{font-size:.74rem;color:var(--muted)}
+/* team list on phones: name + email on one line, controls underneath */
+@media (max-width:640px){
+  .team-row[data-email]{flex-wrap:wrap;row-gap:10px}
+  .team-row[data-email] .who{flex-basis:calc(100% - 50px)}
+  .team-row[data-email] [data-editm]{margin-left:46px}
+  .team-row .who b,.team-row .who small{overflow-wrap:anywhere}
+}

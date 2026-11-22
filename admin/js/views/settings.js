@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { API_BASE } from '../firebase-config.js';
-import { esc, EVENT_LABELS, loading, icon, toast, busy, showFieldErrors, openDialog } from '../ui.js';
+import { esc, EVENT_LABELS, loading, icon, toast, busy, showFieldErrors, openDialog, confirmDialog, copyText } from '../ui.js';
 
 // Each settings page has its own address (#/settings/<page>) and its own permission (see worker/src/staff.js).
 export const TABS = [
@@ -509,24 +509,20 @@ async function teamPanel(p) {
   const reqs = d.requests || [];
   p.innerHTML = `
     ${reqs.length ? `<div class="card req-card"><h3>Waiting for approval <span class="pill placed">${reqs.length}</span></h3>
-      <p class="muted" style="font-size:.84rem;margin-top:-4px">These people signed in to the admin panel and asked for access.</p>
-      ${reqs.map((r) => `<div class="team-row" data-req="${esc(r.email)}"><span class="avatar">${esc((r.name || r.email).charAt(0).toUpperCase())}</span>
-        <span class="who"><b>${esc(r.name || r.email)}</b><small>${r.name ? esc(r.email) + ' · ' : ''}asked ${esc(ago(r.at))}</small></span>
-        <select data-req-role aria-label="Role">${d.roles.filter((x) => x.id !== 'custom').map((x) => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join('')}</select>
-        <button class="btn btn-primary btn-sm" data-approve>Approve</button>
-        <button class="btn btn-ghost btn-sm" data-decline>Decline</button></div>`).join('')}</div>` : ''}
-    <form class="card form${reqs.length ? ' mt' : ''}" id="teamForm" novalidate><h3>Add a team member</h3>
-      <p class="muted" style="font-size:.84rem;line-height:1.6;margin-top:-4px">They sign in at this admin panel with this email (Google, or email &amp; password). The email must be verified.</p>
-      <div class="form-row">
-        <div class="field" data-field="email"><label for="tm-e">Email</label><input id="tm-e" type="email" autocomplete="off" placeholder="staff@example.com"></div>
-        <div class="field" data-field="name"><label for="tm-n">Name <i>(optional)</i></label><input id="tm-n" maxlength="80"></div>
-      </div>
-      <div class="field" data-field="role"><label>Access</label>
-        ${roleButtons(d, d.roles[0]?.id)}
-        <div class="hint" id="tm-h">${esc(roleHelp(d, d.roles[0]?.id))}</div></div>
-      <div class="field" data-field="areas" id="tm-areas" hidden><label>Pages they can open</label>${areaPicker(d, ['orders'], 'tm-pick')}<div class="err"></div></div>
-      <div><button class="btn btn-primary" type="submit">Add to team</button></div>
-    </form>
+      <p class="muted" style="font-size:.84rem;margin-top:-4px">These people signed in to the admin panel and pressed Request access. Choose what each can open, then approve.</p>
+      ${reqs.map((r) => `<div class="req-row" data-req="${esc(r.email)}">
+        <div class="team-row"><span class="avatar">${esc((r.name || r.email).charAt(0).toUpperCase())}</span>
+          <span class="who"><b>${esc(r.name || r.email)}</b><small>${r.name ? esc(r.email) + ' · ' : ''}asked ${esc(ago(r.at))}</small>${r.note ? `<small class="req-note">“${esc(r.note)}”</small>` : ''}</span></div>
+        <label class="req-role"><span>Access</span><select data-req-role aria-label="Access for ${esc(r.email)}">${d.roles.map((x) => `<option value="${esc(x.id)}">${esc(x.id === 'custom' ? 'Custom (pick pages)' : x.label)}</option>`).join('')}</select></label>
+        <div class="hint" data-req-help>${esc(roleHelp(d, d.roles.find((x) => x.id !== 'custom')?.id || d.roles[0]?.id))}</div>
+        <div data-req-areas hidden>${areaPicker(d, ['orders'], `rq-${esc(r.email).replace(/[^a-z0-9]/gi, '')}`)}</div>
+        <div class="req-acts">
+          <button class="btn btn-primary btn-sm" data-approve>Approve</button>
+          <button class="btn btn-ghost btn-sm" data-decline>Decline</button></div>
+      </div>`).join('')}</div>`
+    : `<div class="card req-empty"><h3>Access requests</h3>
+      <p class="muted" style="font-size:.86rem;line-height:1.6;margin:0">No one is waiting. To add someone, ask them to open the admin panel, sign in with their own Google or email account and press <b>Request access</b>. Their request appears here for you to approve and choose what they can open.</p>
+      <div class="quick"><button class="btn btn-line btn-sm" id="copyAdminLink">${icon('copy')} Copy admin link</button></div></div>`}
     <div class="card mt"><h3>Team</h3>
       ${d.owners.map((e) => `<div class="team-row"><span class="avatar">${esc(e.charAt(0).toUpperCase())}</span><span class="who"><b>${esc(e)}</b><small>Super admin · everything</small></span><span class="pill live">Super admin</span></div>`).join('')}
       ${d.staff.map((m) => `<div class="team-row" data-email="${esc(m.email)}"><span class="avatar">${esc((m.name || m.email).charAt(0).toUpperCase())}</span>
@@ -540,34 +536,26 @@ async function teamPanel(p) {
   p.querySelectorAll('[data-req]').forEach((row) => {
     const email = row.dataset.req;
     const r = reqs.find((x) => x.email === email);
+    const sel = row.querySelector('[data-req-role]'), areasBox = row.querySelector('[data-req-areas]');
+    // default to the first ready-made role; "Custom" opens the page picker
+    const first = d.roles.find((x) => x.id !== 'custom');
+    if (first) sel.value = first.id;
+    const sync = () => { areasBox.hidden = sel.value !== 'custom'; row.querySelector('[data-req-help]').textContent = roleHelp(d, sel.value); };
+    sel.addEventListener('change', sync);
+    sync();
     row.querySelector('[data-approve]').addEventListener('click', async (e) => {
+      const role = sel.value, areas = role === 'custom' ? picked(row) : undefined;
+      if (role === 'custom' && !areas.length) { toast('Tick at least one page they can open.', 'err'); return; }
       busy(e.currentTarget, true);
-      try { await api('/api/admin/staff', { method: 'PUT', body: { email, name: r.name, role: row.querySelector('[data-req-role]').value } }); toast(`${email} approved`, 'ok'); teamPanel(p); }
+      try { await api('/api/admin/staff', { method: 'PUT', body: { email, name: r.name, role, areas } }); toast(`${r.name || email} approved`, 'ok'); teamPanel(p); }
       catch (err) { busy(e.currentTarget, false); toast(err.message, 'err'); }
     });
     row.querySelector('[data-decline]').addEventListener('click', async () => {
-      if (!confirm(`Decline access for ${email}?`)) return;
+      if (!(await confirmDialog({ title: 'Decline this request?', message: `${email} won’t be able to open the admin panel or ask again.`, confirmText: 'Decline', danger: true }))) return;
       try { await api(`/api/admin/access-requests/${encodeURIComponent(email)}/decline`, { method: 'POST' }); toast('Declined', 'ok'); teamPanel(p); } catch (err) { toast(err.message, 'err'); }
     });
   });
-
-  const f = p.querySelector('#teamForm');
-  let role = d.roles[0]?.id;
-  f.querySelectorAll('[data-role]').forEach((b) => b.addEventListener('click', () => {
-    role = b.dataset.role;
-    f.querySelectorAll('[data-role]').forEach((x) => x.classList.toggle('on', x === b));
-    f.querySelector('#tm-h').textContent = roleHelp(d, role);
-    f.querySelector('#tm-areas').hidden = role !== 'custom';
-  }));
-  f.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = f.querySelector('[type=submit]');
-    busy(btn, true);
-    try {
-      await api('/api/admin/staff', { method: 'PUT', body: { email: f.querySelector('#tm-e').value, name: f.querySelector('#tm-n').value, role, areas: role === 'custom' ? picked(f) : undefined } });
-      toast('Team member added', 'ok'); teamPanel(p);
-    } catch (err) { busy(btn, false); if (err.data?.fields) showFieldErrors(f, err.data.fields); toast(err.message, 'err'); }
-  });
+  p.querySelector('#copyAdminLink')?.addEventListener('click', () => copyText(location.origin + '/'));
 
   p.querySelectorAll('.team-row[data-email]').forEach((row) => {
     const email = row.dataset.email;

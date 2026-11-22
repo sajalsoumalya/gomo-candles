@@ -1,6 +1,6 @@
 import { HttpError, json, readJson } from './util.js';
 import { db } from './db.js';
-import { requireAdmin, requireArea, adminEmails } from './auth.js';
+import { requireAdmin, requireArea, adminEmails, requestAccess } from './auth.js';
 import { adminListStaff, adminSaveStaff, adminRemoveStaff, adminDeclineRequest, adminListRoles, adminSaveRole, adminDeleteRole } from './staff.js';
 import { adminListCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon } from './coupons.js';
 import {
@@ -118,6 +118,7 @@ const routes = [
   ['GET', '/api/geo/reverse', ({ request, env, customer }) => geoReverse(request, env, customer.uid), 'customer'],
   ['GET', '/api/geo/pincode/([1-9]\\d{5})', ({ request, env, customer, m }) => geoPincode(request, env, customer.uid, m[1]), 'customer'],
 
+  ['POST', '/api/admin/request-access', async ({ request, env }) => json(await requestAccess(request, env))], // signed in, not on the team yet
   ['GET', '/api/admin/me', ({ admin }) => json({ admin }), 'admin'],
   ['GET', '/api/admin/changes', async ({ env }) => json({ changes: await cachedChanges(env) }, 200, { 'cache-control': 'no-store' }), 'admin'],
   ['GET', '/api/admin/stats', ({ env }) => adminStats(env), 'admin'],
