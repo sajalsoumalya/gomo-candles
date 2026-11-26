@@ -568,7 +568,7 @@ async function openAccount() {
   renderAccount();
   try { await loadProfile(); } catch { /* keep the cached profile */ }
   renderAccount();
-  try { acc.orders = (await S.api('/api/account/orders')).orders; } catch (e) { acc.orders = []; acc.error = e.message; }
+  try { acc.orders = (await S.api('/api/account/orders')).orders; acc.ordersFailed = false; } catch (e) { acc.orders = []; acc.ordersFailed = true; acc.error = e.message; }
   renderAccount();
 }
 
@@ -644,9 +644,12 @@ function renderAccount() {
     <li><span>${hasGoogle ? CHECK : '–'}</span>Google ${hasGoogle ? '' : '<button type="button" class="link-btn" data-c="linkgoogle">Connect</button>'}</li></ul>`;
 
   const orders = acc.orders == null ? '<p class="muted">Loading your orders…</p>'
+    : acc.ordersFailed ? '<p class="muted">We couldn\u2019t load your orders. <button type="button" class="link-btn" data-c="oreload">Try again</button></p>'
     : !acc.orders.length ? '<p class="muted">No orders yet. <a href="/shop" data-c="shop">Start shopping →</a></p>'
       : `<ul class="order-list">${acc.orders.map((o) => `<li><div><b>${esc(o.order_no)}</b><small>${esc(S.fmtDate(o.created_at))} · ${o.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}</small></div>
-          <div class="ol-right"><span class="status-pill ${esc(o.status)}">${esc(o.status_label)}</span><b>${inr(o.total)}</b>
+          <div class="ol-right">${o.status === 'placed' && o.payment_method === 'razorpay' && o.payment_status === 'pending'
+            ? '<span class="status-pill pending">Payment pending</span>' : `<span class="status-pill ${esc(o.status)}">${esc(o.status_label)}</span>`}<b>${inr(o.total)}</b>
+          ${o.status === 'placed' && o.payment_method === 'razorpay' && o.payment_status === 'pending' ? `<button type="button" class="btn btn-rust btn-sm" data-c="opay" data-no="${esc(o.order_no)}">Pay now</button>` : ''}
           ${o.status === 'cancelled' && /refund/i.test(o.payment_label || '') ? `<small class="muted">${esc(o.payment_label)}</small>` : ''}
           <button type="button" class="link-btn" data-c="track" data-no="${esc(o.order_no)}">Track</button>
           ${o.can_cancel ? `<button type="button" class="link-btn danger" data-c="ocancel" data-no="${esc(o.order_no)}">Cancel order</button>` : ''}</div></li>`).join('')}</ul>`;
@@ -913,6 +916,17 @@ async function onAccountClick(e) {
       S.closeAll(); await doSignOut(true); if (onAccountPage()) location.href = '/';
     } catch (e) { S.toast(e.message); b.disabled = false; }
     return;
+  }
+  if (c === 'oreload') {
+    acc.orders = null; renderAccount();
+    try { acc.orders = (await S.api('/api/account/orders')).orders; acc.ordersFailed = false; acc.error = ''; } catch (e) { acc.orders = []; acc.ordersFailed = true; }
+    return renderAccount();
+  }
+  if (c === 'opay') {
+    const no = b.dataset.no;
+    S.closeAll();
+    const ord = (acc.orders || []).find((x) => x.order_no === no) || {};
+    return S.payOrder(no, ord.phone || (state.profile || {}).phone || '');
   }
   if (c === 'ocancel') {
     const no = b.dataset.no, o = (acc.orders || []).find((x) => x.order_no === no);

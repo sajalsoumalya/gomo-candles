@@ -8,6 +8,7 @@
   var CATALOG_KEY = 'gomo_catalog_v1';   // last catalog from the API (prices are set in the admin panel)
   var DETAILS_KEY = 'gomo_details_v1';
   var LAST_ORDER_KEY = 'gomo_last_order_v1';
+  var PENDING_PAY_KEY = 'gomo_pending_pay_v1'; // online order opened in Razorpay / a UPI app, not confirmed yet
 
   var STATES = ['Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh',
     'Chhattisgarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh',
@@ -81,7 +82,8 @@
   }
   // until the admin's prices are known (no saved catalog yet), price areas are hidden by the html.catalog-pending class
   var catalogReadyResolve, catalogReadyP = new Promise(function (r) { catalogReadyResolve = r; });
-  function catalogSettled() { document.documentElement.classList.remove('catalog-pending'); hideLoader(); if (catalogReadyResolve) catalogReadyResolve(); }
+  function catalogSettled() { document.documentElement.classList.remove('catalog-pending'); hideLoader(); if (catalogReadyResolve) catalogReadyResolve();
+    if (!catalogSettled.done) { catalogSettled.done = true; setTimeout(function () { try { checkPendingPayment(); } catch (e) { /* ignore */ } }, 800); } }
   // Branded page loader (#pageLoader in index.html): hidden once the first view is drawn. The account page waits for sign-in.
   function hideLoader(force) {
     if (!force && ROUTE.view === 'account') return;
@@ -1047,6 +1049,7 @@
     document.body.classList.toggle('ui-lock', on);
   }
   function open(el) {
+    if (!(history.state && history.state.gomoPanel)) { try { history.pushState({ gomoPanel: true }, ''); } catch (e) { /* ignore */ } }
     if (openPanel && openPanel !== el) openPanel.classList.remove('open');
     openPanel = el;
     el.classList.add('open');
@@ -1054,13 +1057,25 @@
     showOverlay(true);
     setTimeout(function () { var f = $('input, select, button:not(.x-btn)', el); if (f) f.focus({ preventScroll: true }); }, 60);
   }
-  function closeAll() {
+  function closeAll(fromBack) {
+    var had = !!openPanel;
+    if (had && fromBack !== true && history.state && history.state.gomoPanel) { openPanel.classList.remove('open'); openPanel = null; showOverlay(false); history.back(); return; }
     if (openPanel) openPanel.classList.remove('open');
     if (openPanel && openPanel.id === 'trackModal' && /^#track/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
     openPanel = null;
     showOverlay(false);
   }
   function openCart() { renderCart(); open($('#cartDrawer')); }
+  window.addEventListener('popstate', function () {
+    if (!openPanel) return;
+    // Back inside checkout = previous step
+    if (openPanel.id === 'checkoutModal' && !ck.result && ck.step > 1) {
+      ck.step--; ck.fieldErrors = {}; renderCheckout();
+      try { history.pushState({ gomoPanel: true }, ''); } catch (e) { /* ignore */ }
+      return;
+    }
+    closeAll(true);
+  });
 
   // ------------------------------------------------------------------ toast
   var toastTimer = null;
@@ -1102,7 +1117,7 @@
     var keep = ck.values && ck.uid === p.uid && !ck.result ? ck.values : null;
     var addrs = p.addresses || [];
     var def = addrs.filter(function (a) { return a.default; })[0] || addrs[0];
-    ck = { step: 1, idem: uid(), busy: false, error: '', fieldErrors: {}, values: keep || defaultValues(p), result: null, uid: p.uid,
+    ck = { step: keep ? Math.min(Math.max(1, ck.step || 1), 3) : 1, idem: uid(), busy: false, error: '', fieldErrors: {}, values: keep || defaultValues(p), result: null, uid: p.uid,
       addr: def ? def.id : 'new', saveAddr: addrs.length < 5 };
     if (!ck.values.name) ck.values.name = p.name || (def && def.name) || '';
     if (!catalog.payments.cod && ck.values.payment_method === 'cod') ck.values.payment_method = 'razorpay';
@@ -1348,7 +1363,7 @@
     }).then(function (data) {
       store(LAST_ORDER_KEY, { order_no: data.order.order_no, phone: orderPhone() });
       if (ck.addr === 'new' && ck.saveAddr && window.GomoAuth) window.GomoAuth.refresh().catch(function () {});
-      if (data.razorpay) return payOnline(data.order, data.razorpay);
+      if (data.razorpay) { store(PENDING_PAY_KEY, { order_no: data.order.order_no, phone: orderPhone(), at: Date.now() }); return payOnline(data.order, data.razorpay); }
       orderDone(data.order);
     }).catch(function (err) {
       if (needAuthAgain(err)) return;
@@ -1366,6 +1381,7 @@
   }
 
   function orderDone(order) {
+    store(PENDING_PAY_KEY, null);
     cart = [];
     saveCart();
     ck.busy = false;
@@ -1447,9 +1463,11 @@
 
   function retryPay() {
     var o = ck.result.order;
+    if (ck.busy) return;
+    ck.busy = true; renderCheckout();
     api('/api/orders/' + encodeURIComponent(o.order_no) + '/retry-payment', { method: 'POST', body: { phone: orderPhone() } })
-      .then(function (d) { if (d.already_paid) orderDone(d.order); else payOnline(o, d.razorpay); })
-      .catch(function (err) { ck.result.message = err.message; renderCheckout(); });
+      .then(function (d) { ck.busy = false; if (d.already_paid) orderDone(d.order); else payOnline(o, d.razorpay); })
+      .catch(function (err) { ck.busy = false; ck.result.message = err.message; renderCheckout(); });
   }
 
   // The bank took the money but the payment window never reported back: ask the server to check with Razorpay.
@@ -1470,9 +1488,36 @@
 
   function switchCod() {
     var o = ck.result.order;
+    if (ck.busy) return;
+    ck.busy = true; renderCheckout();
     api('/api/orders/' + encodeURIComponent(o.order_no) + '/switch-to-cod', { method: 'POST', body: { phone: orderPhone() } })
-      .then(function (d) { orderDone(d.order); })
-      .catch(function (err) { ck.result.message = err.message; renderCheckout(); });
+      .then(function (d) { if (d.already_paid) toast('Good news: your online payment was received.'); orderDone(d.order); })
+      .catch(function (err) { ck.busy = false; ck.result.message = err.message; renderCheckout(); });
+  }
+
+  function resumePayment(orderNo, phone, order) {
+    var p = profile() || {};
+    ck = { step: 3, idem: uid(), busy: false, error: '', fieldErrors: {}, values: Object.assign(defaultValues(p), { phone: phone || p.phone || '' }),
+      result: { kind: 'pending', order: order || { order_no: orderNo, items: [] } }, uid: p.uid, addr: 'new', saveAddr: false };
+    open($('#checkoutModal'));
+    renderCheckout();
+  }
+  // Came back after paying in a UPI app (the tab may have been reloaded): ask the server what happened.
+  function checkPendingPayment() {
+    var pend = store(PENDING_PAY_KEY);
+    if (!pend || !pend.order_no || Date.now() - (pend.at || 0) > 6 * 3600e3) { if (pend) store(PENDING_PAY_KEY, null); return; }
+    api('/api/orders/' + encodeURIComponent(pend.order_no) + '/check-payment', { method: 'POST', body: { phone: pend.phone } })
+      .then(function (d) {
+        if (d.paid) {
+          store(PENDING_PAY_KEY, null); cart = []; saveCart();
+          toast('Payment received for order ' + pend.order_no + '. Thank you!', 'Track', function () { openTrack(pend.order_no, pend.phone); });
+        } else if (d.order && d.order.status === 'cancelled') {
+          store(PENDING_PAY_KEY, null);
+        } else {
+          toast('Order ' + pend.order_no + ' is waiting for payment.', 'Pay now', function () { resumePayment(pend.order_no, pend.phone, d.order); });
+        }
+      })
+      .catch(function () { /* try again on the next visit */ });
   }
 
   // ------------------------------------------------------------------ tracking
@@ -1558,8 +1603,10 @@
       var buyNow = t.closest('[data-buynow]');
       if (buyNow && !buyNow.disabled) {
         e.preventDefault();
-        var bp = buyNow.getAttribute('data-buynow').split(':');
-        addToCart(bp[0], bp.slice(1).join(':'), 1);
+        var bp = buyNow.getAttribute('data-buynow').split(':'), bt = bp[0], bid = bp.slice(1).join(':');
+        var inCart = cart.some(function (i) { return i.type === bt && i.id === bid; })
+          || (bt === 'offer' && offerById[bid] && offerById[bid].type === 'pack' && cart.some(function (i) { return i.type === 'product' && i.id === offerById[bid].items[0].product_id && i.qty >= offerById[bid].items[0].qty; }));
+        if (!inCart) addToCart(bt, bid, 1); // tapping Buy now again never adds another one
         openCheckout();
         return;
       }
@@ -1775,7 +1822,7 @@
   window.GomoShop = {
     catalogReady: function () { return Promise.race([catalogReadyP, new Promise(function (r) { setTimeout(r, 4000); })]); },
     hideLoader: function () { hideLoader(true); },
-    api: api, open: open, closeAll: closeAll, toast: toast, esc: esc, inr: inr, fmtDate: fmtDate, openTrack: openTrack,
+    api: api, open: open, closeAll: closeAll, toast: toast, payOrder: resumePayment, esc: esc, inr: inr, fmtDate: fmtDate, openTrack: openTrack,
     STATES: STATES, catalog: function () { return catalog; }, pinAutofill: pinAutofill, validateAddress: validateAddressValues,
     waOrderLink: function () { return waLink(waOrderText(totals())); }
   };

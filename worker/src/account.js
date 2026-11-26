@@ -584,6 +584,7 @@ export async function myOrders(request, env) {
     courier: o.courier || null, tracking_no: o.tracking_no || null, tracking_url: o.tracking_url || null,
     city: o.city, pincode: o.pincode,
     can_cancel: ['placed', 'confirmed', 'packed'].includes(o.status),
+    phone: o.phone, // the customer's own order: lets Pay now / Track work for email-only accounts
   }));
   return json({ orders });
 }

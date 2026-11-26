@@ -11,7 +11,7 @@ import { otpChannels } from './otp.js';
 import { evaluateCoupon, claimCoupon, releaseCoupon } from './coupons.js';
 import { stockNeeds, reserveStock, releaseStock } from './stock.js';
 import { refundReviewFields, reconcilePayment, refundWebhook } from './refunds.js';
-import { shiprocketReady } from './shiprocket.js';
+import { shiprocketReady, cancelShipmentForCancelledOrder } from './shiprocket.js';
 
 const ORDER_LIMIT_PER_HOUR = 10;      // per signed-in account
 const ORDER_IP_LIMIT_PER_HOUR = 60;   // per IP: mobile networks put many customers behind one address
@@ -237,6 +237,7 @@ export async function expireUnpaidOrders(env, { now = Date.now(), minutes = UNPA
     const { value: status, etag } = await d.getWithEtag(`orders/${no}/status`);
     if (status !== 'placed') continue;
     if ((await d.get(`orders/${no}/payment_status`)) !== 'pending') continue;
+    if ((await d.get(`orders/${no}/payment_method`)) !== 'razorpay') continue; // switched to Cash on Delivery meanwhile
     if (!(await d.putIfMatch(`orders/${no}/status`, 'cancelled', etag))) continue;
     const released = await releaseHeldStock(env, no);
     if (o.coupon_code) await releaseCoupon(env, o.coupon_code, no).catch((e) => console.error('release coupon', e));
@@ -272,7 +273,9 @@ async function restorePaidAfterCancel(env, ctx, orderNo, actor) {
     : { payment_attention: true, updated_at: nowIso(), ...refundReviewFields(order, 'Paid after the order was cancelled'),
         [`events/${pushKey()}`]: event('note', null, 'Paid after the order was cancelled. Refund awaiting review.', actor) });
   const fresh = await loadOrder(env, orderNo);
-  background(ctx, notifyOrderEvent(env, fresh.order, fresh.items, 'order_placed', { admin: true }));
+  background(ctx, back
+    ? notifyOrderEvent(env, fresh.order, fresh.items, 'order_placed', { admin: true })
+    : notifyOrderEvent(env, fresh.order, fresh.items, 'cancelled', { whatsapp: false, email: false, admin: true, adminNote: 'was paid online after it had been cancelled' }));
   return back;
 }
 
@@ -388,8 +391,18 @@ export async function switchToCod(request, env, ctx, orderNo) {
   const couponType = order.coupon_code ? (await db(env).get(`coupons/${order.coupon_code}/type`)) : null;
   if (couponType !== 'free_shipping') shipping = shippingFor((order.subtotal || 0) - (order.discount || 0), settings.shipping);
   const total = (order.total || 0) - (order.shipping || 0) + shipping;
-  await db(env).patch(`orders/${orderNo}`, {
-    payment_method: 'cod', payment_status: 'pending', shipping, total, updated_at: nowIso(),
+  // Claim the switch atomically on payment_method: if the payment is marked paid meanwhile, markPaid sees "cod"
+  // and turns it back to prepaid (no cash collected); if markPaid already ran, payment_status is "paid" and we stop.
+  const d = db(env);
+  const { value: method, etag } = await d.getWithEtag(`orders/${orderNo}/payment_method`);
+  if (method !== 'razorpay' || !(await d.putIfMatch(`orders/${orderNo}/payment_method`, 'cod', etag))) throw new HttpError(409, 'This order cannot be changed.');
+  if ((await d.get(`orders/${orderNo}/payment_status`)) === 'paid') {
+    await d.put(`orders/${orderNo}/payment_method`, 'razorpay');
+    const paid = await loadOrder(env, orderNo);
+    return json({ order: publicSummary(paid.order, paid.items), already_paid: true });
+  }
+  await d.patch(`orders/${orderNo}`, {
+    shipping, total, updated_at: nowIso(),
     [`events/${pushKey()}`]: event('payment', null, 'Switched to Cash on Delivery' + (shipping !== (order.shipping || 0) ? ` · delivery ${shipping ? '₹' + shipping : 'free'}` : ''), 'customer'),
   });
   const fresh = await loadOrder(env, orderNo);
@@ -421,6 +434,7 @@ export async function customerCancelOrder(request, env, ctx, orderNo) {
     cancelled_by: 'customer', updated_at: nowIso(), ...(paid ? { refund_due: true, payment_attention: true, ...refundReviewFields(order, 'Cancelled by the customer') } : {}),
     [`events/${pushKey()}`]: event('status', 'cancelled', ['Cancelled by the customer', reason, paid ? 'Paid online: refund awaiting review' : ''].filter(Boolean).join(' · '), 'customer'),
   });
+  await cancelShipmentForCancelledOrder(env, orderNo, 'customer');
   const fresh = await loadOrder(env, orderNo);
   background(ctx, notifyOrderEvent(env, fresh.order, fresh.items, 'cancelled', { admin: true }));
   return json({ order: publicSummary(fresh.order, fresh.items), refund_due: paid });
@@ -609,6 +623,7 @@ export async function adminUpdateOrder(request, env, ctx, orderNo, admin) {
   await db(env).patch(`orders/${orderNo}`, patch);
   if (patch.status === 'cancelled' && order.coupon_code) await releaseCoupon(env, order.coupon_code, orderNo).catch((e) => console.error('release coupon', e));
   if (patch.status === 'cancelled' && order.stock_held) await releaseHeldStock(env, orderNo).catch((e) => console.error('release stock', e));
+  if (patch.status === 'cancelled') await cancelShipmentForCancelledOrder(env, orderNo, admin?.email || 'admin');
 
   const notify = body.notify || {};
   let sent = [];

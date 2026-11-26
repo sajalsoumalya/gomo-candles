@@ -185,10 +185,11 @@ export async function deliver(env, msg, fetchImpl = fetch) {
 
 /**
  * Send notifications for an order event.
- * opts: { whatsapp=true, email=true, admin=false }
+ * opts: { whatsapp=true, email=true, admin=false, adminNote }
+ * admin alert: "New order" for order_placed; for any other event (or with adminNote) a short alert saying what happened.
  */
 export async function notifyOrderEvent(env, order, items, event, opts = {}, fetchImpl = fetch) {
-  const { whatsapp = true, email = true, admin = false } = opts;
+  const { whatsapp = true, email = true, admin = false, adminNote = null } = opts;
   const settings = await getSettings(env);
   const vars = orderVars(order, items, settings);
   const sends = [];
@@ -208,7 +209,15 @@ export async function notifyOrderEvent(env, order, items, event, opts = {}, fetc
     }
   }
 
-  if (admin) {
+  if (admin && (adminNote || event !== 'order_placed')) {
+    // Not a new order: never send the "🛎️ New order" alert (a packer might pack a cancelled order).
+    const what = adminNote || (event === 'cancelled' ? 'was cancelled' + (order.cancelled_by === 'customer' ? ' by the customer' : '') : `is now ${event.replace(/_/g, ' ')}`);
+    const text = `${event === 'cancelled' ? '❌' : '⚠️'} Order ${order.order_no} ${what}.\n\n${vars.items}\nTotal: ${vars.total} (${vars.payment})${order.refund_due ? '\n\n💸 Paid online: refund due. Open the order in the admin.' : ''}${order.shiprocket?.awb ? '\n🚚 Courier was booked: check the pickup is cancelled.' : ''}`;
+    for (const to of settings.notify.admin_whatsapp) sends.push({ channel: 'whatsapp', to, text, event: 'admin_alert' });
+    const adminTo = settings.notify.admin_emails.length || settings.notify.admin_whatsapp.length ? settings.notify.admin_emails
+      : String(env.ADMIN_EMAILS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+    for (const to of adminTo) sends.push({ channel: 'email', to, subject: `Order ${order.order_no} ${what}`, text, event: 'admin_alert' });
+  } else if (admin) {
     const at = settings.templates.admin_new_order || DEFAULT_TEMPLATES.admin_new_order;
     for (const to of settings.notify.admin_whatsapp) sends.push({ channel: 'whatsapp', to, text: render(at.whatsapp, vars), event: 'admin_new_order' });
     const intro = render(at.email_intro, vars);

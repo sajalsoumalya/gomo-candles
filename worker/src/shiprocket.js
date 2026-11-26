@@ -374,7 +374,14 @@ export async function bookShipment(env, orderNo, body, admin, f = fetch) {
     const base = Date.now();
     patch[`events/${pushKey(base)}`] = event('tracking', null, `Shiprocket pickup booked · ${sr.courier_name || 'courier'} · AWB ${sr.awb}${sr.pickup_scheduled_date ? ` · pickup ${sr.pickup_scheduled_date}` : ''}`, admin?.email || 'Shiprocket');
     let moved = null;
-    if (FLOW.indexOf(order.status) < FLOW.indexOf('packed')) {
+    // The order may have been cancelled while we were talking to Shiprocket: never bring it back to "packed".
+    const nowStatus = await db(env).get(`orders/${orderNo}/status`);
+    if (nowStatus === 'cancelled') {
+      await db(env).patch(`orders/${orderNo}`, { shiprocket: sr, updated_at: nowIso() });
+      await cancelShipment(env, orderNo, admin, f).catch((e) => console.error('undo booking after cancel', orderNo, e?.message || e));
+      throw new HttpError(409, 'This order was cancelled while the pickup was being booked, so the booking was cancelled again.');
+    }
+    if (FLOW.indexOf(nowStatus || order.status) < FLOW.indexOf('packed')) {
       patch.status = 'packed';
       patch[`events/${pushKey(base + 1)}`] = event('status', 'packed', 'Pickup booked with Shiprocket', admin?.email || 'Shiprocket');
       moved = 'packed';
@@ -442,6 +449,18 @@ export async function syncShipment(env, orderNo, { actor = 'Shiprocket', notify 
 }
 
 // ------------------------------------------------------------------ cancel
+
+/** After an order is cancelled: cancel its Shiprocket booking too (if not picked up). Never throws. */
+export async function cancelShipmentForCancelledOrder(env, orderNo, actor) {
+  if (!shiprocketReady(env)) return null;
+  const sr = await db(env).get(`orders/${orderNo}/shiprocket`).catch(() => null);
+  if (!sr?.sr_order_id) return null;
+  try { return await cancelShipment(env, orderNo, { email: actor }); }
+  catch (e) {
+    await db(env).patch(`orders/${orderNo}`, { shipment_attention: true, [`events/${pushKey()}`]: event('tracking', null, `Order cancelled but the Shiprocket booking could not be cancelled automatically: ${String(e?.message || e).slice(0, 160)}. Cancel it in Shiprocket.`, 'system') }).catch(() => {});
+    return null;
+  }
+}
 
 export async function cancelShipment(env, orderNo, admin, f = fetch) {
   const { order } = await loadOrderRaw(env, orderNo);
