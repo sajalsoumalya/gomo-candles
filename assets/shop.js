@@ -8,6 +8,7 @@
   var CATALOG_KEY = 'gomo_catalog_v1';   // last catalog from the API (prices are set in the admin panel)
   var DETAILS_KEY = 'gomo_details_v1';
   var LAST_ORDER_KEY = 'gomo_last_order_v1';
+  var PAGE_ID = String(Date.now()) + Math.random().toString(36).slice(2, 6); // this page load's history entry for panels
   var PENDING_PAY_KEY = 'gomo_pending_pay_v1'; // online order opened in Razorpay / a UPI app, not confirmed yet
 
   var STATES = ['Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh',
@@ -1049,7 +1050,7 @@
     document.body.classList.toggle('ui-lock', on);
   }
   function open(el) {
-    if (!(history.state && history.state.gomoPanel)) { try { history.pushState({ gomoPanel: true }, ''); } catch (e) { /* ignore */ } }
+    if (!(history.state && history.state.gomoPanel === PAGE_ID)) { try { history.pushState({ gomoPanel: PAGE_ID }, ''); } catch (e) { /* ignore */ } }
     if (openPanel && openPanel !== el) openPanel.classList.remove('open');
     openPanel = el;
     el.classList.add('open');
@@ -1057,9 +1058,9 @@
     showOverlay(true);
     setTimeout(function () { var f = $('input, select, button:not(.x-btn)', el); if (f) f.focus({ preventScroll: true }); }, 60);
   }
-  function closeAll(fromBack) {
-    var had = !!openPanel;
-    if (had && fromBack !== true && history.state && history.state.gomoPanel) { openPanel.classList.remove('open'); openPanel = null; showOverlay(false); history.back(); return; }
+  // Closing never touches history: the extra entry stays and is reused by the next panel, so sign-in → checkout,
+  // links that navigate after closing, and #track all behave as before. Only the phone's back button pops it.
+  function closeAll() {
     if (openPanel) openPanel.classList.remove('open');
     if (openPanel && openPanel.id === 'trackModal' && /^#track/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
     openPanel = null;
@@ -1071,10 +1072,10 @@
     // Back inside checkout = previous step
     if (openPanel.id === 'checkoutModal' && !ck.result && ck.step > 1) {
       ck.step--; ck.fieldErrors = {}; renderCheckout();
-      try { history.pushState({ gomoPanel: true }, ''); } catch (e) { /* ignore */ }
+      try { history.pushState({ gomoPanel: PAGE_ID }, ''); } catch (e) { /* ignore */ }
       return;
     }
-    closeAll(true);
+    closeAll();
   });
 
   // ------------------------------------------------------------------ toast
@@ -1382,7 +1383,7 @@
 
   function orderDone(order) {
     store(PENDING_PAY_KEY, null);
-    cart = [];
+    if (!ck.resumed) cart = [];
     saveCart();
     ck.busy = false;
     ck.result = { kind: 'done', order: order };
@@ -1498,7 +1499,7 @@
   function resumePayment(orderNo, phone, order) {
     var p = profile() || {};
     ck = { step: 3, idem: uid(), busy: false, error: '', fieldErrors: {}, values: Object.assign(defaultValues(p), { phone: phone || p.phone || '' }),
-      result: { kind: 'pending', order: order || { order_no: orderNo, items: [] } }, uid: p.uid, addr: 'new', saveAddr: false };
+      result: { kind: 'pending', order: order || { order_no: orderNo, items: [] } }, uid: p.uid, addr: 'new', saveAddr: false, resumed: true };
     open($('#checkoutModal'));
     renderCheckout();
   }

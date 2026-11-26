@@ -145,7 +145,7 @@ function providerMissing(env, channel, msg) {
  * SMS messages need msg.sms (settings.sms) and msg.code.
  */
 export async function deliver(env, msg, fetchImpl = fetch) {
-  const { channel, to, subject = null, text, html = null, event, order_no = null, logId = null, logText } = msg;
+  const { channel, to, subject = null, text, html = null, event, order_no = null, logId = null, logText, logSubject } = msg;
   let status = 'sent', error = null, provider_id = null;
   const missing = providerMissing(env, channel, msg);
   if (missing) {
@@ -171,7 +171,7 @@ export async function deliver(env, msg, fetchImpl = fetch) {
       await d.patch(`notifications/${logId}`, { status, error, provider_id, attempts: (Number(prev) || 1) + 1, updated_at: new Date().toISOString() });
     } else {
       await d.put(`notifications/${pushKey()}`, {
-        created_at: new Date().toISOString(), order_no, event, channel, recipient: to, subject, body: storedText, html: storedHtml, status, error, provider_id, attempts: 1,
+        created_at: new Date().toISOString(), order_no, event, channel, recipient: to, subject: logSubject ?? subject, body: storedText, html: storedHtml, status, error, provider_id, attempts: 1,
         retryable: logText === undefined,
       });
     }

@@ -113,7 +113,7 @@ export async function startOtp(env, opts, fetchImpl = fetch) {
   const ttl = isEmail ? EMAIL_TTL : PHONE_TTL;
   const minutes = Math.round(ttl / 60_000);
   const text = otpText(settings, code, minutes);
-  const logText = text.replace(code, '******');
+  const logText = text.split(code).join('******'); // every copy, even if the message template repeats {{code}}
   const event = `otp_${purpose}`;
   let used = null, whatsapp = null, lastError = '';
 
@@ -125,7 +125,7 @@ export async function startOtp(env, opts, fetchImpl = fetch) {
       const html = codeEmail({ settings, code, minutes, purpose });
       const r = await deliver(env, {
         channel: 'email', to: target, subject: `${code} is your ${settings.store.name} ${purpose === 'login_email' ? 'sign-in' : 'verification'} code`, text: plainText(text), html, event,
-        logText,
+        logText, logSubject: `****** is your ${settings.store.name} ${purpose === 'login_email' ? 'sign-in' : 'verification'} code`,
       }, fetchImpl);
       if (r.status === 'sent') used = 'email';
       else lastError = r.error;

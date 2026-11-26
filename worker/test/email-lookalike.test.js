@@ -14,3 +14,13 @@ describe('lookalike emails (a.b@ vs a_b@ share one database key)', () => {
     expect(await staffRecord(env, 'a_b@outlook.com')).toBe(null);
   });
 });
+
+describe('sign-in codes never reach the admin Messages log', () => {
+  it('subject and body are masked', async () => {
+    const { deliver } = await import('../src/notify.js');
+    const rows = [];
+    const env = { __db: { put: async (p, v) => rows.push(v), patch: async () => {}, get: async () => null } };
+    await deliver(env, { channel: 'email', to: 'a@b.co', subject: '482913 is your GoMo sign-in code', text: 'Code 482913', logText: 'Code ******', logSubject: '****** is your GoMo sign-in code', event: 'otp_login_email' }, async () => new Response('{}'));
+    expect(JSON.stringify(rows)).not.toMatch(/482913/);
+  });
+});

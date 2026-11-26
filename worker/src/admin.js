@@ -76,7 +76,7 @@ export async function adminListNotifications(request, env) {
   const size = 30;
   const map = (await db(env).get('notifications', { orderBy: 'created_at', limitToLast: 1000 })) || {};
   let rows = Object.entries(map).map(([id, n]) => ({ id, created_at: n.created_at, order_no: n.order_no || null, event: n.event, channel: n.channel,
-    recipient: n.recipient, subject: n.subject || null, status: n.status, error: n.error || null, attempts: n.attempts || 1, retryable: n.retryable !== false,
+    recipient: n.recipient, subject: n.subject ? (String(n.event || '').startsWith('otp_') ? String(n.subject).replace(/\b\d{4,8}\b/g, '******') : n.subject) : null, status: n.status, error: n.error || null, attempts: n.attempts || 1, retryable: n.retryable !== false,
     dismissed: !!n.dismissed_at, is_code: String(n.event || '').startsWith('otp_') }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   if (status === 'failed') rows = rows.filter((n) => n.status === 'failed' && !n.dismissed);
