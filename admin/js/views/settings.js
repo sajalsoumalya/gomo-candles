@@ -529,7 +529,7 @@ async function teamPanel(p) {
         <span class="who"><b>${esc(m.name || m.email)}</b><small>${m.name ? esc(m.email) + ' · ' : ''}last active ${esc(ago(m.last_seen_at))}</small>
           <small class="area-sum">${m.areas.map((a) => esc(label(a))).join(' · ')}</small></span>
         <button class="btn btn-line btn-sm" data-editm>${icon('edit')} ${esc(m.role_label)}</button>
-        <label class="switch" title="Allow sign-in"><input type="checkbox" data-active ${m.active ? 'checked' : ''}><i></i></label>
+        <label class="switch" title="Allow sign-in (off also disables their Google / email sign-in)"><input type="checkbox" data-active ${m.active ? 'checked' : ''}><i></i></label>
         <button class="btn btn-ghost btn-sm" data-remove aria-label="Remove">${icon('trash')}</button></div>`).join('') || '<p class="muted" style="font-size:.86rem;margin-top:8px">No staff yet.</p>'}
     </div>`;
 
@@ -561,7 +561,7 @@ async function teamPanel(p) {
     const email = row.dataset.email;
     const m = d.staff.find((x) => x.email === email);
     const save = async (patch) => {
-      try { await api('/api/admin/staff', { method: 'PUT', body: { email, name: m.name, role: m.role, areas: m.areas, active: m.active, ...patch } }); toast('Saved', 'ok'); teamPanel(p); }
+      try { const r = await api('/api/admin/staff', { method: 'PUT', body: { email, name: m.name, role: m.role, areas: m.areas, active: m.active, ...patch } }); toast(r.auth ? `Saved · ${r.auth}` : 'Saved', /could not/.test(r.auth || '') ? 'err' : 'ok'); teamPanel(p); }
       catch (err) { toast(err.message, 'err'); teamPanel(p); }
     };
     row.querySelector('[data-active]').addEventListener('change', (e) => save({ active: e.target.checked }));
@@ -586,8 +586,8 @@ async function teamPanel(p) {
       });
     });
     row.querySelector('[data-remove]').addEventListener('click', async () => {
-      if (!confirm(`Remove ${email} from the team? They will lose access immediately.`)) return;
-      try { await api(`/api/admin/staff/${encodeURIComponent(email)}`, { method: 'DELETE' }); toast('Removed', 'ok'); teamPanel(p); } catch (err) { toast(err.message, 'err'); }
+      if (!confirm(`Remove ${email} from the team?\n\nThey lose admin access immediately, and their Google / email sign-in is deleted, so they can't sign in to the shop with this email either. Their past orders are kept.`)) return;
+      try { const r = await api(`/api/admin/staff/${encodeURIComponent(email)}`, { method: 'DELETE' }); toast(`Removed · ${r.auth || 'done'}`, 'ok'); teamPanel(p); } catch (err) { toast(err.message, 'err'); }
     });
   });
 }

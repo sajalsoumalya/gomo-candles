@@ -6,6 +6,31 @@
 import { HttpError, json, nowIso } from './util.js';
 import { db, safeKey, values } from './db.js';
 import { isValidEmail } from './validate.js';
+import { authAdmin } from './google.js';
+
+/**
+ * Keep the person's Firebase sign-in in step with their staff record: 'disable' / 'enable' / 'delete'.
+ * Finds the Firebase user by the exact email. Never throws: returns what happened, for the admin to see.
+ */
+async function syncStaffAuth(env, email, action, ownerEmails = []) {
+  if (ownerEmails.includes(email)) return 'skipped (super admin)';
+  try {
+    const fb = authAdmin(env);
+    const u = await fb.lookupByEmail(email);
+    if (!u?.uid) return 'no sign-in account';
+    if (action === 'delete') {
+      await fb.remove(u.uid);
+      // their shop profile stays (orders are kept for tax records) but can no longer be signed in to
+      await db(env).patch(`users/${u.uid}`, { disabled: true, auth_deleted_at: nowIso() }).catch(() => {});
+      return 'sign-in deleted';
+    }
+    await fb.update(u.uid, { disabled: action === 'disable' });
+    return action === 'disable' ? 'sign-in disabled' : 'sign-in enabled';
+  } catch (e) {
+    console.error('staff auth sync failed', action, e?.message || e);
+    return `could not ${action} sign-in: ${String(e?.message || e).slice(0, 120)}`;
+  }
+}
 
 /** Every admin page that can be granted. `group` is only for display. */
 export const AREAS = [
@@ -126,6 +151,9 @@ export async function adminSaveStaff(env, body, admin, ownerEmails) {
   const d = db(env);
   const path = `staff/${safeKey(email)}`;
   const existing = await d.get(path);
+  if (existing && String(existing.email || '').toLowerCase() !== email) {
+    throw new HttpError(409, `This email looks too similar to ${existing.email}, who is already on the team. Use a different address.`, { fields: { email: 'Too similar to an existing team member.' } });
+  }
   const rec = {
     email, role, areas, name: String(body.name || existing?.name || '').trim().slice(0, 80),
     active: body.active === undefined ? existing?.active !== false : body.active !== false,
@@ -133,17 +161,25 @@ export async function adminSaveStaff(env, body, admin, ownerEmails) {
     last_seen_at: existing?.last_seen_at || null,
   };
   await d.put(path, rec);
+  const wasActive = existing ? existing.active !== false : true;
+  const auth = !existing && rec.active ? null
+    : wasActive && !rec.active ? await syncStaffAuth(env, email, 'disable', ownerEmails)
+      : !wasActive && rec.active ? await syncStaffAuth(env, email, 'enable', ownerEmails) : null;
+  if (auth) await audit(env, admin, rec.active ? 'staff_enabled' : 'staff_disabled', `${email} · ${auth}`);
   const req = await d.get(`access_requests/${safeKey(email)}`);
   if (req?.status === 'pending') await d.patch(`access_requests/${safeKey(email)}`, { status: 'approved', decided_by: admin.email, decided_at: nowIso() });
   await audit(env, admin, existing ? 'staff_updated' : req ? 'staff_approved' : 'staff_added', `${email} → ${role}${areas ? ` (${areas.join(',')})` : ''}`);
-  return json({ staff: pub(rec, saved) }, existing ? 200 : 201);
+  return json({ staff: pub(rec, saved), auth }, existing ? 200 : 201);
 }
 
-export async function adminRemoveStaff(env, email, admin) {
+export async function adminRemoveStaff(env, email, admin, ownerEmails = []) {
   const e = String(email || '').toLowerCase();
+  const rec = await db(env).get(`staff/${safeKey(e)}`);
+  if (!rec || String(rec.email || '').toLowerCase() !== e) throw new HttpError(404, 'This person is not on the team.');
   await db(env).remove(`staff/${safeKey(e)}`);
-  await audit(env, admin, 'staff_removed', e);
-  return json({ ok: true });
+  const auth = await syncStaffAuth(env, e, 'delete', ownerEmails);
+  await audit(env, admin, 'staff_removed', `${e} · ${auth}`);
+  return json({ ok: true, auth });
 }
 
 // ------------------------------------------------------------------ access requests
