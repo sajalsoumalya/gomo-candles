@@ -19,8 +19,8 @@
   <meta property="og:title" content="Evil Eye Sachets — 3 pc combo — ₹499 · GoMo Candles" />
   <meta property="og:description" content="Wardrobe, car and desk — a sachet for each." />
   <meta property="og:url" content="https://gomo.earthenbeauty.in/combo/evil-eye-sachets-3-pc-combo" />
-  <meta property="og:image" content="https://gomo.earthenbeauty.in/assets/og/combo-evil-eye-sachets-3-pc-combo.jpg?v=mwqsx2yl" />
-  <meta property="og:image:secure_url" content="https://gomo.earthenbeauty.in/assets/og/combo-evil-eye-sachets-3-pc-combo.jpg?v=mwqsx2yl" />
+  <meta property="og:image" content="https://gomo.earthenbeauty.in/assets/og/combo-evil-eye-sachets-3-pc-combo.jpg?v=mwxdjxgt" />
+  <meta property="og:image:secure_url" content="https://gomo.earthenbeauty.in/assets/og/combo-evil-eye-sachets-3-pc-combo.jpg?v=mwxdjxgt" />
   <meta property="og:image:type" content="image/jpeg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -31,7 +31,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Evil Eye Sachets — 3 pc combo — ₹499 · GoMo Candles" />
   <meta name="twitter:description" content="Wardrobe, car and desk — a sachet for each." />
-  <meta name="twitter:image" content="https://gomo.earthenbeauty.in/assets/og/combo-evil-eye-sachets-3-pc-combo.jpg?v=mwqsx2yl" />
+  <meta name="twitter:image" content="https://gomo.earthenbeauty.in/assets/og/combo-evil-eye-sachets-3-pc-combo.jpg?v=mwxdjxgt" />
   <meta name="twitter:image:alt" content="Evil Eye Sachets — 3 pc combo" />
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"OnlineStore","name":"GoMo Candles","url":"https://gomo.earthenbeauty.in/","logo":"https://gomo.earthenbeauty.in/assets/brand/icon-512.png","image":"https://gomo.earthenbeauty.in/assets/social/og-1200x630.jpg?v=2","description":"Evil Eye candles, sachets and linen mist — aromatherapy and protection, handcrafted in Kolkata.","email":"support@earthenbeauty.in","address":{"@type":"PostalAddress","addressLocality":"Kolkata","addressRegion":"West Bengal","addressCountry":"IN"},"parentOrganization":{"@type":"Organization","name":"Earthen Beauty"},"sameAs":["https://instagram.com/gomocandles"]}</script>
   <link rel="preload" as="image" href="assets/img/hero-ritual-1080.webp" imagesrcset="assets/img/hero-ritual-640.webp 640w, assets/img/hero-ritual-1080.webp 1080w" imagesizes="(max-width:980px) 100vw, 640px" />
@@ -92,7 +92,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .ico:hover{color:var(--rust);transform:translateY(-1px)}
 .ico svg{width:20px;height:20px}
 .badge{position:absolute;top:-7px;right:-8px;min-width:16px;height:16px;padding:0 4px;border-radius:var(--pill);background:var(--rust);color:#fff;font-size:.6rem;font-weight:700;display:flex;align-items:center;justify-content:center}
-.burger{display:none;width:36px;height:36px;align-items:center;justify-content:center;flex-direction:column;gap:5px}
+.burger{display:none;width:44px;height:44px;align-items:center;justify-content:center;flex-direction:column;gap:5px}
 .burger span{width:20px;height:2px;background:var(--ink);border-radius:2px;transition:.3s}
 .nav-open .burger span:nth-child(1){transform:translateY(7px) rotate(45deg)}
 .nav-open .burger span:nth-child(2){opacity:0}
@@ -435,7 +435,10 @@ img.studio{mix-blend-mode:multiply}
 .pdp-main .prod-tag{top:16px;left:16px}
 .pdp-off{position:absolute;top:16px;right:16px;background:var(--rust);color:#fff;font:700 .78rem var(--f-b);padding:6px 12px;border-radius:var(--pill)}
 .pdp-main .pack-x{opacity:1;transform:none;left:16px;bottom:16px}
-.pdp-thumbs{display:flex;gap:10px;margin-top:12px}
+.pdp-thumbs{display:flex;gap:10px;margin-top:12px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.pdp-thumbs::-webkit-scrollbar{display:none}
+.pdp-thumbs button{flex:none}
+.pdp-grid>*{min-width:0}
 .pdp-thumbs button{width:78px;height:78px;border-radius:14px;overflow:hidden;background:var(--tile);border:2px solid transparent;transition:border-color .2s}
 .pdp-thumbs button.on{border-color:var(--rust)}
 .pdp-thumbs .photo{width:100%;height:100%;object-fit:cover}
@@ -503,6 +506,7 @@ img.studio{mix-blend-mode:multiply}
 @keyframes plPulse{0%,100%{opacity:.55;transform:scale(.96)}50%{opacity:1;transform:scale(1)}}
 @keyframes plSlide{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
 @media (prefers-reduced-motion:reduce){.pl-logo,.pl-bar i{animation:none}}
+@media (pointer:coarse){.nav-icons .ico{width:44px;height:44px}.nav-icons{gap:2px}.ico .badge{top:4px;right:4px}}
 </style>
 </head>
 <body>

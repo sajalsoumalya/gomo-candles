@@ -83,6 +83,8 @@ export function can(areas, need) {
 /** Look up a non-owner's staff record; null if not staff or switched off. */
 export async function staffRecord(env, email) {
   const rec = await db(env).get(`staff/${safeKey(email)}`);
+  // safeKey maps "a.b@x.com" and "a_b@x.com" to one key: only the exact email the owner approved gets in.
+  if (rec && String(rec.email || '').toLowerCase() !== String(email || '').toLowerCase()) return null;
   return rec && rec.active !== false && rec.role && rec.role !== 'owner' ? rec : null;
 }
 

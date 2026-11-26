@@ -83,3 +83,21 @@ describe('sign in with an email code', () => {
     expect(db.root.users.olduser.phone).toBe('9876543210'); // a Google account's data is kept
   });
 });
+
+describe('lookalike email cannot sign in to someone else', () => {
+  it('a_b@ gets its own new account, not the a.b@ account', async () => {
+    const sent = [];
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => { sent.push(JSON.parse(init.body)); return new Response(JSON.stringify({ status: 'success', data: { message_id: 'm' } }), { status: 200 }); });
+    const db = memDb();
+    db.root.users = { victim: { uid: 'victim', email: 'rahul.k@yahoo.com', email_verified: true, name: 'Rahul' } };
+    db.root.user_index = { email: { 'rahul_k@yahoo_com': 'victim' } };
+    const env = { __db: db, OTP_SECRET: 's'.repeat(32), POSTAL_URL: 'https://postal.test', POSTAL_API_KEY: 'k', MAIL_FROM: 'shop@gomo.test' };
+    const r = (p, b) => new Request(`https://api.test${p}`, { method: 'POST', body: JSON.stringify(b), headers: { 'content-type': 'application/json', 'cf-connecting-ip': '9.9.9.9' } });
+    await emailLoginStart(r('/api/auth/email/start', { email: 'rahul_k@yahoo.com' }), env);
+    const code = /\b(\d{6})\b/.exec(sent.at(-1).plain_body || sent.at(-1).subject)[1];
+    const out = await (await emailLoginVerify(r('/api/auth/email/verify', { email: 'rahul_k@yahoo.com', code }), env)).json();
+    expect(out.custom_token).not.toBe('token-for-victim');
+    expect(db.root.users.victim.email).toBe('rahul.k@yahoo.com');
+    spy.mockRestore();
+  });
+});

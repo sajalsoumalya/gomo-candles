@@ -439,7 +439,10 @@ img.studio{mix-blend-mode:multiply}
 .pdp-main .prod-tag{top:16px;left:16px}
 .pdp-off{position:absolute;top:16px;right:16px;background:var(--rust);color:#fff;font:700 .78rem var(--f-b);padding:6px 12px;border-radius:var(--pill)}
 .pdp-main .pack-x{opacity:1;transform:none;left:16px;bottom:16px}
-.pdp-thumbs{display:flex;gap:10px;margin-top:12px}
+.pdp-thumbs{display:flex;gap:10px;margin-top:12px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.pdp-thumbs::-webkit-scrollbar{display:none}
+.pdp-thumbs button{flex:none}
+.pdp-grid>*{min-width:0}
 .pdp-thumbs button{width:78px;height:78px;border-radius:14px;overflow:hidden;background:var(--tile);border:2px solid transparent;transition:border-color .2s}
 .pdp-thumbs button.on{border-color:var(--rust)}
 .pdp-thumbs .photo{width:100%;height:100%;object-fit:cover}

@@ -297,7 +297,13 @@ export async function emailLoginVerify(request, env) {
 
   // The code proves the email, so an existing Firebase account with this email (password, Google or earlier code login) is theirs.
   const fbUser = await authAdmin(env).lookupByEmail(email);
-  let uid = fbUser?.uid || (await d.get(idx)) || null;
+  let uid = fbUser?.uid || null;
+  if (!uid) {
+    // The index key is shared by lookalike emails (a.b@ and a_b@): only use it if that account has exactly this email.
+    const viaIndex = await d.get(idx);
+    const p = viaIndex ? await loadProfile(env, viaIndex) : null;
+    if (p && String(p.email || '').toLowerCase() === String(email).toLowerCase()) uid = viaIndex;
+  }
   let profile = uid ? await loadProfile(env, uid) : null;
   if (profile?.merged_into) { uid = profile.merged_into; profile = await loadProfile(env, uid); }
   let isNew = false, fbCreated = false;
