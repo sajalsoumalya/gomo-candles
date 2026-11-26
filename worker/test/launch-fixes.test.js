@@ -65,3 +65,15 @@ describe('account delete and export', () => {
     expect(data.orders[0].events).toBeUndefined();
   });
 });
+
+describe('recycled phone number', () => {
+  it("someone else's order on the same number is not shown or exported", async () => {
+    const { myOrders } = await import('../src/account.js');
+    const m = memDb({
+      user_orders: { u1: { 'GM-A': '2026-11-01', 'GM-B': '2026-11-20' } },
+      orders: { 'GM-A': { order_no: 'GM-A', uid: 'old-owner', status: 'delivered', items: {} }, 'GM-B': { order_no: 'GM-B', uid: 'u1', status: 'placed', items: {} } },
+    });
+    const exp = await (await exportMyData(new Request('https://x/api'), m, WHO)).json();
+    expect(exp.orders.map((o) => o.order_no)).toEqual(['GM-B']);
+  });
+});

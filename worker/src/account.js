@@ -192,13 +192,18 @@ async function linkPhoneOrders(env, uid, phone) {
   const nos = Object.keys(idx);
   if (!nos.length) return 0;
   const updates = {};
+  let n = 0;
   for (const no of nos) {
-    updates[`user_orders/${uid}/${no}`] = typeof idx[no] === 'string' ? idx[no] : nowIso();
+    // Only orders nobody owns yet (or already ours). Phone numbers get recycled in India: an order placed by an
+    // earlier holder of this number belongs to their account, never to whoever has the SIM now.
     const owner = await d.get(`orders/${no}/uid`);
+    if (owner && owner !== uid) continue;
+    updates[`user_orders/${uid}/${no}`] = typeof idx[no] === 'string' ? idx[no] : nowIso();
     if (!owner) updates[`orders/${no}/uid`] = uid;
+    n++;
   }
-  await d.patch('', updates);
-  return nos.length;
+  if (n) await d.patch('', updates);
+  return n;
 }
 
 // --------------------------------------------------------------------------- mobile OTP sign-in (public)
@@ -577,7 +582,7 @@ export async function myOrders(request, env) {
   const idx = (await d.get(`user_orders/${uid}`)) || {};
   const nos = Object.entries(idx).sort((a, b) => String(b[1]).localeCompare(String(a[1]))).slice(0, 50).map(([no]) => no);
   const rows = await Promise.all(nos.map((no) => d.get(`orders/${no}`)));
-  const orders = rows.filter(Boolean).map((o) => ({
+  const orders = rows.filter((o) => o && (!o.uid || o.uid === uid)).map((o) => ({
     order_no: o.order_no, created_at: o.created_at, status: o.status, status_label: STATUS_LABELS[o.status] || o.status,
     total: o.total, payment_label: paymentLabel(o), payment_method: o.payment_method, payment_status: o.payment_status,
     items: values(o.items).map((i) => ({ name: i.name, qty: i.qty })),
@@ -596,8 +601,11 @@ export async function exportMyData(request, env, who = null) {
   const { uid, profile } = who || await requireCustomer(request, env);
   const d = db(env);
   const idx = (await d.get(`user_orders/${uid}`)) || {};
-  const orders = (await Promise.all(Object.keys(idx).slice(0, 500).map((no) => d.get(`orders/${no}`)))).filter(Boolean)
-    .map(({ events, idempotency_key, razorpay_order_id, stock_held, stock_released, ...o }) => ({ ...o, items: values(o.items) }));
+  const orders = (await Promise.all(Object.keys(idx).slice(0, 500).map((no) => d.get(`orders/${no}`)))).filter((o) => o && (!o.uid || o.uid === uid))
+    // internal fields and staff names left out (refund/courier "by" fields hold staff emails)
+    .map(({ events, idempotency_key, razorpay_order_id, razorpay_order_ids, stock_held, stock_released, shiprocket, extra_payments, payment_attention, shipment_attention, ...o }) => ({
+      ...o, items: values(o.items), refund: o.refund ? { status: o.refund.status, amount: o.refund.amount, processed_at: o.refund.processed_at || null } : undefined,
+    }));
   const { addresses, ...rest } = profile || {};
   const data = { exported_at: nowIso(), account: rest, addresses: values(addresses), orders };
   return new Response(JSON.stringify(data, null, 2), {

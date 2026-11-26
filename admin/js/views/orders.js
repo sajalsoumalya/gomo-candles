@@ -8,9 +8,10 @@ const filters = { status: '', payment: '', q: '', from: '', to: '', page: 1 };
 
 export async function render(el, ctx) {
   // allow deep links like #/orders?status=placed
+  // a deep link starts from a clean list, so an old filter can't hide orders (e.g. "COD to collect" then "New orders")
+  if (ctx.query.toString()) Object.assign(filters, { status: '', payment: '', q: '', from: '', to: '', page: 1 });
   if (ctx.query.has('status')) filters.status = ctx.query.get('status');
   if (ctx.query.has('payment')) filters.payment = ctx.query.get('payment');
-  if (ctx.query.toString()) filters.page = 1;
 
   el.innerHTML = `
     <div class="page-head"><div><h1>Orders</h1><p>Confirm, pack, ship — customers are notified at each step.</p></div>
@@ -24,6 +25,8 @@ export async function render(el, ctx) {
         <option value="">All payments</option>
         <option value="cod_due" ${filters.payment === 'cod_due' ? 'selected' : ''}>COD to collect</option>
         <option value="unpaid_online" ${filters.payment === 'unpaid_online' ? 'selected' : ''}>Online — unpaid</option>
+        <option value="refund_due" ${filters.payment === 'refund_due' ? 'selected' : ''}>Refund due</option>
+        <option value="attention" ${filters.payment === 'attention' ? 'selected' : ''}>Payment needs a check</option>
       </select>
       <input class="date-in" type="date" id="from" value="${esc(filters.from)}" aria-label="From date">
       <input class="date-in" type="date" id="to" value="${esc(filters.to)}" aria-label="To date">

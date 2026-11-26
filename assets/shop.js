@@ -793,6 +793,12 @@
       if (p && buyable(p)) el.innerHTML = priceWithMrp(p);
     });
     var pre = prepaidRule(), sh = catalog.shipping;
+    $$('[data-ship-policy]').forEach(function (el) {
+      var cod = sh.fee || 0, onl = pre ? (pre.prepaid_fee || 0) : cod, above = sh.free_above != null ? ' (free on orders ' + (sh.include_equal ? 'from ' : 'above ') + inr(sh.free_above) + ')' : '';
+      el.innerHTML = !cod && !onl ? 'Shipping is <strong>free on every order</strong>. If this changes, the charge will be shown in your cart and at checkout before you place the order.'
+        : 'Delivery charges: <strong>' + (onl ? inr(onl) : 'free') + ' when you pay online</strong> and <strong>' + (cod ? inr(cod) : 'free') + ' for Cash on Delivery</strong>' + esc(above) + '. The exact charge is always shown in your cart and at checkout before you place the order.';
+    });
+    $$('[data-cod-fee]').forEach(function (el) { el.textContent = sh.fee ? ' (delivery charge ' + inr(sh.fee) + ')' : ''; });
     $$('[data-ship-note]').forEach(function (el) { el.textContent = !sh.fee ? 'on every order' : pre && !pre.prepaid_fee ? 'on prepaid orders' : sh.free_above != null ? ('on orders ' + (sh.include_equal ? 'from ' : 'above ') + inr(sh.free_above)) : 'Delivery ' + inr(sh.fee); });
     // WhatsApp-only links (footer icon, "Order via WhatsApp") stay hidden until a real number is set
     $$('[data-wa]').forEach(function (a) {

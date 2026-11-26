@@ -511,12 +511,18 @@ async function adminScope(env, p) {
   return rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
 
+/** A paid online order whose money should go back: cancelled, or a refund waiting / failed. */
+const needsRefund = (o) => o.payment_status === 'paid' && o.payment_method === 'razorpay'
+  && (o.status === 'cancelled' || o.refund_due || ['review', 'failed'].includes(o.refund?.status)) && o.refund?.status !== 'processed';
+
 /** Apply the admin list filters (status, payment, q, from, to) — shared by the list and the CSV export. */
 function filterOrders(rows, p) {
   const status = p('status');
   if (status && STATUSES.includes(status)) rows = rows.filter((o) => o.status === status);
   if (p('payment') === 'cod_due') rows = rows.filter((o) => o.payment_method === 'cod' && o.payment_status !== 'paid' && o.status !== 'cancelled');
-  if (p('payment') === 'unpaid_online') rows = rows.filter((o) => o.payment_method === 'razorpay' && o.payment_status !== 'paid');
+  if (p('payment') === 'unpaid_online') rows = rows.filter((o) => o.payment_method === 'razorpay' && o.payment_status !== 'paid' && o.status !== 'cancelled');
+  if (p('payment') === 'refund_due') rows = rows.filter(needsRefund);
+  if (p('payment') === 'attention') rows = rows.filter((o) => o.payment_attention && o.payment_status !== 'refunded');
   const q = p('q').trim().toLowerCase().slice(0, 60);
   if (q) {
     const digits = q.replace(/\D/g, '');
@@ -662,6 +668,7 @@ export async function adminStats(env) {
   const sum = (list) => list.reduce((s, o) => s + (Number(o.total) || 0), 0);
   const today = orders.filter((o) => o.created_at >= istMidnight);
   const cod = orders.filter((o) => o.payment_method === 'cod' && o.payment_status !== 'paid' && o.status !== 'cancelled');
+  const refunds = orders.filter(needsRefund);
   const cat = await loadCatalog(env);
   const low_stock = cat.products.filter((p) => p.stock != null && p.stock <= p.low_stock_at).map((p) => ({ id: p.id, name: p.name, stock: p.stock }));
   return json({
@@ -673,8 +680,10 @@ export async function adminStats(env) {
     orders_30d: counted.filter((o) => o.created_at >= since30).length,
     today: { n: today.length, amount: sum(today) },
     cod_due: { n: cod.length, amount: sum(cod) },
-    recent: orders.slice(0, 8).map(({ order_no, created_at, customer_name, total, status, payment_method, payment_status }) =>
-      ({ order_no, created_at, customer_name, total, status, payment_method, payment_status })),
+    refund_due: { n: refunds.length, amount: sum(refunds) },
+    attention: orders.filter((o) => o.payment_attention && o.payment_status !== 'refunded').length,
+    recent: orders.slice(0, 8).map(({ order_no, created_at, customer_name, total, status, payment_method, payment_status, refund }) =>
+      ({ order_no, created_at, customer_name, total, status, payment_method, payment_status, refund: refund ? { status: refund.status } : null })),
     failed_notifications_7d: values(notes).filter((n) => n.status === 'failed' && !n.dismissed_at).length,
   });
 }
